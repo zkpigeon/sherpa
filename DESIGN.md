@@ -121,6 +121,7 @@ The server sets each attempt's verdict from the runner's results.
 - A finished step holds the metric when the rank test doesn't show the head commit worse than the best commit at p below 0.05.
 - While a module is active, its current step fails at the step's 3rd failed turn. The later steps depend on it, so the module becomes stuck. Once a module is past target, its first attempt that isn't a win passes it instead.
 - A retried post with the same `attemptId` returns the stored attempt, so a retry never counts twice.
+- Every verdict also goes into one table per agent, with the runner's numbers and the attempt's note. The table holds each abandoned module's reason too, so before each new idea the agent can read what it already tried and which assumptions failed.
 
 ## Modules have a time limit
 
@@ -184,6 +185,7 @@ Agent calls carry the agent ID in the path and the agent token. Runner calls car
 | `POST /agents/{id}/modules/{m}/abandon` | agent | Records the abandon reason for a pending, active, or stuck module. If the module has a win, it also takes the follow-up module. Returns the commit the next module starts from |
 | `GET /agents/{id}/project` | agent | Returns the agent's project in brief: its goal, standing, and latest measurement, and each module's ID, state, steps, goal, and whether its verifiers are missing, frozen, or failed at the baseline, so a verifier agent can find the modules that need verifiers |
 | `GET /agents/{id}` | agent | Returns the agent's board line, or `no open project` before its first one |
+| `GET /agents/{id}/results.tsv` | agent or admin | Returns one tab-separated line for each of the agent's attempts across its projects, in the order they were posted, with its verdict, the runner's numbers, and its note, plus one for each abandoned module with its reason. An agent with no attempts gets the header alone |
 | `GET /board` | agent or admin | Returns every agent's board line as plain text |
 | `GET /` | admin | Serves the dashboard. Any page load (`Accept: text/html`) gets the dashboard, so `/agents/1` is a page in a browser and the board line for `curl`. A browser without the dashboard's cookie gets a sign-in page that asks for the admin token |
 | `POST /signin`, `POST /signout` | none | Trades the admin token for the dashboard's cookie, and clears it. The cookie holds an HMAC of the admin token, so changing the token signs every browser out |

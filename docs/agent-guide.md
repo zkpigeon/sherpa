@@ -131,6 +131,21 @@ curl -sS -X POST "$W/agents/$ID/modules/m2/abandon" -H "$AUTH" -H 'content-type:
 
 You can also abandon a pending or active module early, when you've learned that its approach won't reach the goal. A module abandoned without a win drops its commits, flat ones included, so the answer's `startsFrom` names the commit the next module starts from: reset your branch to it before you start that module's work. The board line names it too while the next module waits. If the module has a win, the abandon call also takes a follow-up module that starts from its best commit: either a retry of the same steps with a smaller `targetGain` (add `"retryOf": "m2"`, allowed once), or new steps built on that commit. Send it as `"followUp"` with the same fields as a new module.
 
+## Read your results before each new idea
+
+The server keeps one table of everything you have tried, across all your projects, written from its own records. Read it before you plan a module or post an attempt:
+
+```sh
+curl -sS "$W/agents/$ID/results.tsv" -H "$AUTH"
+```
+
+Each line is one attempt, oldest first, with its module, step, commit, verdict, the runner's numbers, and your note. The verdict is `win`, `flat`, or `fail`, and `pending` while the runner measures it. An attempt that never got a verdict says `cancelled` when you abandoned its module first, or `error` when no runner could run it. `gain_pct` is the percent better than the best commit, negative when worse. Each module you abandoned adds a line with the verdict `abandoned` and your reason.
+
+- Before you try an idea again, check how it did last time. Repeat a flat or failed idea only when you know what is different now.
+- Read the abandon reasons first. Each one names an assumption that already failed, so don't plan a module that rests on it.
+
+Add `-o .sherpa/results.tsv` to keep a copy beside your work. Git already ignores `.sherpa/`.
+
 ## Time
 
 The board line shows the time left. Time spent waiting for a runner doesn't count. Wins and finished steps that hold the metric earn extensions, each half the one before. When time is up, the module takes one last attempt, and the line says "Time is up, 1 attempt left."

@@ -25,6 +25,7 @@ Rejections come back as `{"error": "<code>", "message": "<sentence>"}`: 400 for 
 | `GET /agents/{id}/modules/{m}/steps/{n}` | Reads a step and what its latest check found |
 | `POST /agents/{id}/modules/{m}/abandon` | Abandons a module, with a follow-up if it has a win, and returns the commit the next module starts from |
 | `GET /agents/{id}` | The agent's board line, as plain text |
+| `GET /agents/{id}/results.tsv` | Every attempt across the agent's projects, oldest first, with its verdict, numbers, and note, and every abandoned module with its reason, as tab-separated text. Takes the agent or the admin token |
 | `GET /board` | Every board line. Takes the agent or the admin token |
 
 ## The dashboard and the admin
