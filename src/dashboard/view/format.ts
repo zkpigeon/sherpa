@@ -1,4 +1,4 @@
-import type { Commit, Direction, Flag, JobState, ModuleStatus, Verdict } from '../../shared/api.ts'
+import type { Clean, CleanResults, Commit, Direction, Flag, JobState, ModuleStatus, Verdict } from '../../shared/api.ts'
 
 /** A measured value: whole numbers from 100 up, so it reads like the board line, and a decimal or two below. */
 export function figure(n: number): string {
@@ -23,6 +23,12 @@ export function gainWords(gain: number, minGain: number, direction: Direction): 
 }
 
 export const pValue = (p: number) => (p < 0.001 ? '< 0.001' : `= ${p.toFixed(3)}`)
+
+/** Both commits' sizes under the clean rules, such as "812 best; 774 new", naming a commit that breaks them. */
+export function sizeWords(c: CleanResults): string {
+  const one = (x: Clean, which: string) => `${x.size === null ? 'no size' : figure(x.size)} ${which}${x.passed ? '' : ', breaks the rules'}`
+  return `${one(c.best, 'best')}; ${one(c.next, 'new')}`
+}
 
 /** The rank test against 0.05. For a loss the p-value is for "worse", which fails below 0.05. */
 export function pWords(p: number, gain: number): string {

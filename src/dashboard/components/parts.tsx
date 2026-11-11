@@ -55,7 +55,7 @@ export function Icon({ name, size = 14, className }: { name: keyof typeof GLYPHS
   )
 }
 
-/** A verdict as a dot: filled accent for a win, a ring for flat, filled danger for a fail. */
+/** A verdict as a dot: filled accent for a win, half filled for simpler, a ring for flat, filled danger for a fail. */
 export function VerdictDot({ verdict, fresh }: { verdict: Verdict | 'pending'; fresh?: boolean }) {
   return <span className="dot" data-v={verdict} data-fresh={fresh || undefined} aria-hidden />
 }

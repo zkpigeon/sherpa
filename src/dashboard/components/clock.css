@@ -153,6 +153,11 @@
   background: var(--accent);
 }
 
+.clock__dot[data-v='simpler'] {
+  border: 1.5px solid var(--accent);
+  background: linear-gradient(90deg, var(--accent) 50%, transparent 50%);
+}
+
 .clock__dot[data-v='flat'] {
   border: 1.5px solid var(--text-faint);
 }

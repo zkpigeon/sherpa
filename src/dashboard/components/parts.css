@@ -114,6 +114,12 @@
   background: var(--accent);
 }
 
+/* Half filled, so it reads apart from a win by shape as well as by its label */
+.dot[data-v='simpler'] {
+  border: 1.5px solid var(--accent);
+  background: linear-gradient(90deg, var(--accent) 50%, transparent 50%);
+}
+
 .dot[data-v='flat'] {
   border: 1.5px solid var(--text-faint);
 }

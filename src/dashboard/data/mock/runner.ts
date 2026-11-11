@@ -46,6 +46,8 @@ export interface ResultOptions {
   testsTotal?: number
   /** Work per run on the new commit, when it differs from the benchmark's usual. */
   work?: number
+  /** Sizes under the clean rules on the best commit and the new one, both following them. */
+  clean?: [best: number, next: number]
 }
 
 // Offsets in spreads, in run order. Both sets are centered, so each median is exact
@@ -87,7 +89,8 @@ export function finish(w: World, job: JobId, outcome: Outcome, opts: ResultOptio
     const b = on(j.commit, center, NEW_ORDER, opts.work ?? work)
     runs = a.flatMap((x, i) => [x, b[i]!])
   }
-  send({ outcome: 'done', tests: { passed: total, total }, runs, touched })
+  const clean = opts.clean && { clean: { best: { passed: true as const, size: opts.clean[0] }, next: { passed: true as const, size: opts.clean[1] } } }
+  send({ outcome: 'done', tests: { passed: total, total }, runs, touched, ...clean })
 }
 
 /** The job behind an attempt. */
