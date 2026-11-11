@@ -1,44 +1,44 @@
-# Agent Whipper on one machine: a home server or a VPS.
+# Sherpa on one machine: a home server or a VPS.
 #   cp .env.example .env   # then fill in the three tokens
 #   docker compose up -d --build
 services:
-  whip-server:
+  sherpa-server:
     build: { context: ., target: server }
     restart: unless-stopped
     environment:
-      WHIP_AGENT_TOKEN: ${WHIP_AGENT_TOKEN:?set WHIP_AGENT_TOKEN in .env}
-      WHIP_RUNNER_TOKEN: ${WHIP_RUNNER_TOKEN:?set WHIP_RUNNER_TOKEN in .env}
-      WHIP_ADMIN_TOKEN: ${WHIP_ADMIN_TOKEN:?set WHIP_ADMIN_TOKEN in .env}
-      WHIP_DEFAULT_MAX_MINUTES: ${WHIP_DEFAULT_MAX_MINUTES:-90}
-      WHIP_MAX_MINUTES_CEILING: ${WHIP_MAX_MINUTES_CEILING:-120}
-      WHIP_LEASE_MINUTES: ${WHIP_LEASE_MINUTES:-2}
+      SHERPA_AGENT_TOKEN: ${SHERPA_AGENT_TOKEN:?set SHERPA_AGENT_TOKEN in .env}
+      SHERPA_RUNNER_TOKEN: ${SHERPA_RUNNER_TOKEN:?set SHERPA_RUNNER_TOKEN in .env}
+      SHERPA_ADMIN_TOKEN: ${SHERPA_ADMIN_TOKEN:?set SHERPA_ADMIN_TOKEN in .env}
+      SHERPA_DEFAULT_MAX_MINUTES: ${SHERPA_DEFAULT_MAX_MINUTES:-90}
+      SHERPA_MAX_MINUTES_CEILING: ${SHERPA_MAX_MINUTES_CEILING:-120}
+      SHERPA_LEASE_MINUTES: ${SHERPA_LEASE_MINUTES:-2}
     ports:
-      - ${WHIP_BIND:-127.0.0.1}:${WHIP_PORT:-8080}:8080
-    # Only whip-server mounts the database, outside any folder an agent works in
+      - ${SHERPA_BIND:-127.0.0.1}:${SHERPA_PORT:-8080}:8080
+    # Only sherpa-server mounts the database, outside any folder an agent works in
     volumes:
-      - whip-data:/data
+      - sherpa-data:/data
 
-  whip-runner:
+  sherpa-runner:
     build: { context: ., target: runner }
     restart: unless-stopped
     depends_on:
-      whip-server: { condition: service_healthy }
+      sherpa-server: { condition: service_healthy }
     # The runner gets its own token and nothing else
     environment:
-      WHIP_URL: http://whip-server:8080
-      WHIP_RUNNER_TOKEN: ${WHIP_RUNNER_TOKEN:?set WHIP_RUNNER_TOKEN in .env}
-      WHIP_RUNNER_NAME: ${WHIP_RUNNER_NAME:-runner-1}
-      WHIP_LABELS: ${WHIP_LABELS:-cpu}
-      WHIP_REPO: ${WHIP_REPO:-}
-      WHIP_CPUSET: ${WHIP_CPUSET:-}
-      WHIP_MEMORY: ${WHIP_MEMORY:-}
+      SHERPA_URL: http://sherpa-server:8080
+      SHERPA_RUNNER_TOKEN: ${SHERPA_RUNNER_TOKEN:?set SHERPA_RUNNER_TOKEN in .env}
+      SHERPA_RUNNER_NAME: ${SHERPA_RUNNER_NAME:-runner-1}
+      SHERPA_LABELS: ${SHERPA_LABELS:-cpu}
+      SHERPA_REPO: ${SHERPA_REPO:-}
+      SHERPA_CPUSET: ${SHERPA_CPUSET:-}
+      SHERPA_MEMORY: ${SHERPA_MEMORY:-}
     volumes:
       # To start job containers next to it. Job containers never get the socket
       - /var/run/docker.sock:/var/run/docker.sock
-      - whip-work:/work
+      - sherpa-work:/work
       # Bare repos on the host, for remotes like file:///repos/search.git
-      - ${WHIP_REPOS:-./repos}:/repos:ro
+      - ${SHERPA_REPOS:-./repos}:/repos:ro
 
 volumes:
-  whip-data:
-  whip-work:
+  sherpa-data:
+  sherpa-work:

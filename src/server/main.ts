@@ -1,4 +1,4 @@
-// whip-server: the API, the dashboard and the database in one process.
+// sherpa-server: the API, the dashboard and the database in one process.
 // Configured by environment variables; see .env.example.
 import { createServer } from 'node:http'
 import { resolve } from 'node:path'
@@ -23,26 +23,26 @@ function minutes(name: string, fallback: number): number {
   return n
 }
 
-const tokens: Tokens = { agent: token('WHIP_AGENT_TOKEN'), runner: token('WHIP_RUNNER_TOKEN'), admin: token('WHIP_ADMIN_TOKEN') }
+const tokens: Tokens = { agent: token('SHERPA_AGENT_TOKEN'), runner: token('SHERPA_RUNNER_TOKEN'), admin: token('SHERPA_ADMIN_TOKEN') }
 if (new Set(Object.values(tokens)).size !== 3) throw new Error('The agent, runner and admin tokens must all differ.')
 
 const config: Config = {
-  defaultMaxMinutes: minutes('WHIP_DEFAULT_MAX_MINUTES', DEFAULTS.defaultMaxMinutes),
-  maxMinutesCeiling: minutes('WHIP_MAX_MINUTES_CEILING', DEFAULTS.maxMinutesCeiling),
-  leaseMinutes: minutes('WHIP_LEASE_MINUTES', DEFAULTS.leaseMinutes),
+  defaultMaxMinutes: minutes('SHERPA_DEFAULT_MAX_MINUTES', DEFAULTS.defaultMaxMinutes),
+  maxMinutesCeiling: minutes('SHERPA_MAX_MINUTES_CEILING', DEFAULTS.maxMinutesCeiling),
+  leaseMinutes: minutes('SHERPA_LEASE_MINUTES', DEFAULTS.leaseMinutes),
   runs: DEFAULTS.runs,
 }
-if (config.defaultMaxMinutes > config.maxMinutesCeiling) throw new Error('WHIP_DEFAULT_MAX_MINUTES is above WHIP_MAX_MINUTES_CEILING.')
+if (config.defaultMaxMinutes > config.maxMinutesCeiling) throw new Error('SHERPA_DEFAULT_MAX_MINUTES is above SHERPA_MAX_MINUTES_CEILING.')
 
-const db = resolve(env.WHIP_DB ?? 'whip.db')
-const dashboard = env.WHIP_DASHBOARD === '' ? null : resolve(env.WHIP_DASHBOARD ?? 'dist/dashboard')
-const port = Number(env.WHIP_PORT ?? 8080)
-const host = env.WHIP_HOST ?? '127.0.0.1'
+const db = resolve(env.SHERPA_DB ?? 'sherpa.db')
+const dashboard = env.SHERPA_DASHBOARD === '' ? null : resolve(env.SHERPA_DASHBOARD ?? 'dist/dashboard')
+const port = Number(env.SHERPA_PORT ?? 8080)
+const host = env.SHERPA_HOST ?? '127.0.0.1'
 
 const store = openStore(db)
 const service = createService(store, config)
 const server = createServer(createHandler({ service, tokens, dashboard }))
-server.listen(port, host, () => console.log(`whip-server listening on http://${host}:${port}, database ${db}`))
+server.listen(port, host, () => console.log(`sherpa-server listening on http://${host}:${port}, database ${db}`))
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.on(signal, () => {

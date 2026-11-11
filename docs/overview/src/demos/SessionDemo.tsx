@@ -12,7 +12,7 @@ const LINES = [
   { text: '→ POST /agents/1/modules/m2/attempts  a7 · commit 3c1d', kind: 'dim' as const },
   { text: '← fail · tests failed · step 2: 2 of 3 failed turns', kind: 'dim' as const },
   { text: ' ' },
-  { text: '[whip] agent 1: Project: search-perf, Module (2 / 4): index layout,', kind: 'hook' as const },
+  { text: '[sherpa] agent 1: Project: search-perf, Module (2 / 4): index layout,', kind: 'hook' as const },
   { text: '       Progress: 1 / 2, Blurb: Block-compressing postings. 41 min left.', kind: 'hook' as const },
   { text: '→ POST /agents/1/modules/m2/attempts  a8 · commit 8e2a' },
   { text: '← fail · slower than the best, p = 0.004 · m2 is stuck', kind: 'err' as const },
@@ -97,7 +97,7 @@ async function script(a: Act<S>) {
 
 export function SessionDemo() {
   return (
-    <Stage width={960} height={420} compact={{ below: 640, width: 358, height: 600 }} initial={initial} poster={poster} script={script} className="aw-demo sd" {...LOOK}>
+    <Stage width={960} height={420} compact={{ below: 640, width: 358, height: 600 }} initial={initial} poster={poster} script={script} className="sh-demo sd" {...LOOK}>
       {(s) => (
         <>
           <Window chrome="terminal" title="agent 1 — search-perf" className="sd-term">

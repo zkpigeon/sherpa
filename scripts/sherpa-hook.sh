@@ -1,9 +1,9 @@
 #!/bin/sh
 # Prints the agent's board line, for a Claude Code or Codex hook to add to
-# the agent's context. It never blocks the agent: if whip-server can't be
+# the agent's context. It never blocks the agent: if sherpa-server can't be
 # reached, it says so and exits 0, because one outage shouldn't stop a night.
-# Needs WHIP_URL, WHIP_AGENT_ID and WHIP_AGENT_TOKEN, from the environment
-# or from an env file beside it, as scripts/connect.sh sets up in .whip/.
+# Needs SHERPA_URL, SHERPA_AGENT_ID and SHERPA_AGENT_TOKEN, from the environment
+# or from an env file beside it, as scripts/connect.sh sets up in .sherpa/.
 #
 # With no argument it prints plain text, which both tools add to the context
 # only on SessionStart and UserPromptSubmit. Pass the hook event's name, such
@@ -13,7 +13,7 @@ event=$1
 # Event names are letters only; anything else gets the plain line rather than broken JSON
 case "$event" in *[!A-Za-z]*) event= ;; esac
 here=$(dirname "$0")
-if { [ -z "$WHIP_URL" ] || [ -z "$WHIP_AGENT_ID" ] || [ -z "$WHIP_AGENT_TOKEN" ]; } && [ -f "$here/env" ]; then
+if { [ -z "$SHERPA_URL" ] || [ -z "$SHERPA_AGENT_ID" ] || [ -z "$SHERPA_AGENT_TOKEN" ]; } && [ -f "$here/env" ]; then
   . "$here/env"
 fi
 
@@ -27,20 +27,20 @@ say() {
   fi
 }
 
-if [ -z "$WHIP_URL" ] || [ -z "$WHIP_AGENT_ID" ] || [ -z "$WHIP_AGENT_TOKEN" ]; then
-  say "Agent Whipper: set WHIP_URL, WHIP_AGENT_ID and WHIP_AGENT_TOKEN to see your board line."
+if [ -z "$SHERPA_URL" ] || [ -z "$SHERPA_AGENT_ID" ] || [ -z "$SHERPA_AGENT_TOKEN" ]; then
+  say "Sherpa: set SHERPA_URL, SHERPA_AGENT_ID and SHERPA_AGENT_TOKEN to see your board line."
   exit 0
 fi
 # -w appends the status code on its own line, so a refusal can be told from an outage
-if out=$(curl -sS --max-time 5 -w '\n%{http_code}' -H "Authorization: Bearer $WHIP_AGENT_TOKEN" "$WHIP_URL/agents/$WHIP_AGENT_ID" 2>&1); then
+if out=$(curl -sS --max-time 5 -w '\n%{http_code}' -H "Authorization: Bearer $SHERPA_AGENT_TOKEN" "$SHERPA_URL/agents/$SHERPA_AGENT_ID" 2>&1); then
   code=$(printf '%s\n' "$out" | tail -n 1)
   body=$(printf '%s\n' "$out" | sed '$d')
   if [ "$code" = 200 ]; then
     say "$body"
   else
-    say "Agent Whipper: whip-server answered $code ($(printf '%s' "$body" | head -n 1)). Check WHIP_URL and WHIP_AGENT_TOKEN, and carry on with your current step meanwhile."
+    say "Sherpa: sherpa-server answered $code ($(printf '%s' "$body" | head -n 1)). Check SHERPA_URL and SHERPA_AGENT_TOKEN, and carry on with your current step meanwhile."
   fi
 else
-  say "Agent Whipper: whip-server didn't answer ($(printf '%s\n' "$out" | head -n 1)). Carry on with your current step, and keep your blurb current."
+  say "Sherpa: sherpa-server didn't answer ($(printf '%s\n' "$out" | head -n 1)). Carry on with your current step, and keep your blurb current."
 fi
 exit 0

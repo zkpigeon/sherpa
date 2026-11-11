@@ -1,6 +1,6 @@
-# Agent Whipper design
+# Sherpa design
 
-Agent Whipper keeps long-running agents on track. Each agent splits its hill climb into modules and steps, submits every attempt as a commit, and keeps a short blurb current. A runner measures each attempt with tests and a benchmark the agent can't change, and the server judges the result. An active module that fails a step, finishes its steps without reaching its target, or runs out of time becomes stuck, and the agent moves on to a different task or implementation. A module that keeps winning earns more time and can run past its target.
+Sherpa keeps long-running agents on track. Each agent splits its hill climb into modules and steps, submits every attempt as a commit, and keeps a short blurb current. A runner measures each attempt with tests and a benchmark the agent can't change, and the server judges the result. An active module that fails a step, finishes its steps without reaching its target, or runs out of time becomes stuck, and the agent moves on to a different task or implementation. A module that keeps winning earns more time and can run past its target.
 
 ## Terms
 
@@ -33,7 +33,7 @@ The agent writes one sentence about what it is working on. The server appends th
 agent 1: Project: search-perf, Module (2 / 5): query cache, Progress: 3 / 7, Blurb: Caching parsed queries. Goal: p95 latency 371 -> 334 ms, 10% lower. Best so far 352 ms. 2 wins in a row. 38 min left.
 ```
 
-`whip-server` also serves the dashboard, a web page with one tile per agent. A tile shows everything in the board line, plus a time-left bar, the next queued project, the module's verifiers, open verifier change requests, and flags. Your actions, such as approving a verifier change, happen on the dashboard.
+`sherpa-server` also serves the dashboard, a web page with one tile per agent. A tile shows everything in the board line, plus a time-left bar, the next queued project, the module's verifiers, open verifier change requests, and flags. Your actions, such as approving a verifier change, happen on the dashboard.
 
 ## Data model
 
@@ -154,7 +154,7 @@ The server checks every goal when it is set.
 
 ## The dashboard flags what doesn't add up
 
-The defenses above block the cheats that look like normal work, such as editing a test, loosening the benchmark, keeping the best run, or marking a step done without doing it. An agent that leaves its task to attack the whipper itself is rare, so v1 detects that instead of preventing it. The dashboard flags:
+The defenses above block the cheats that look like normal work, such as editing a test, loosening the benchmark, keeping the best run, or marking a step done without doing it. An agent that leaves its task to attack Sherpa itself is rare, so v1 detects that instead of preventing it. The dashboard flags:
 
 - a commit that touches a verifier file, as the runner reports it,
 - fewer tests running than in the module's previous job,
@@ -203,9 +203,9 @@ A Claude Code or Codex hook calls `GET /agents/{id}` and adds the board line to 
 ## Stack
 
 - TypeScript on Node 26 for both services. Node runs `.ts` files directly, and `tsc --noEmit` checks the types.
-- SQLite through the built-in `node:sqlite`. `whip-server` is the only writer.
-- Self-hosted with one Docker Compose file and two services. `whip-server` runs the API, the dashboard, and the database. `whip-runner` claims jobs and starts a throwaway container for each one. The same file runs on a home machine or a VPS.
-- The database lives in a Docker volume that only `whip-server` mounts, outside any project folder an agent works in.
+- SQLite through the built-in `node:sqlite`. `sherpa-server` is the only writer.
+- Self-hosted with one Docker Compose file and two services. `sherpa-server` runs the API, the dashboard, and the database. `sherpa-runner` claims jobs and starts a throwaway container for each one. The same file runs on a home machine or a VPS.
+- The database lives in a Docker volume that only `sherpa-server` mounts, outside any project folder an agent works in.
 - Commits live in a git remote that both the agents and the runner can reach. `scripts/connect.sh` makes one per repo, a bare copy in a host folder the runner mounts, and the agent pushes each commit under a ref named after it, so a reset branch never makes a measured commit unreachable.
 - Benchmarks can run on their own CPU cores (`--cpuset-cpus`) when other work shares the machine.
 

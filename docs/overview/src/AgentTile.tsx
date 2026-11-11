@@ -40,9 +40,9 @@ export function AgentTile({ t, className, target }: { t: Tile; className?: strin
   const loaded = useRef({ module: t.module.n, count: t.attempts.length })
   const fresh = (i: number) => t.module.n !== loaded.current.module || i >= loaded.current.count
   return (
-    <div className={`aw-tile${className ? ` ${className}` : ''}`} data-state={t.state} data-target={target}>
-      <div className="aw-tile__head">
-        <span className="aw-tile__agent">{t.agent}</span>
+    <div className={`sh-tile${className ? ` ${className}` : ''}`} data-state={t.state} data-target={target}>
+      <div className="sh-tile__head">
+        <span className="sh-tile__agent">{t.agent}</span>
         <States
           align="end"
           value={t.state}
@@ -58,61 +58,61 @@ export function AgentTile({ t, className, target }: { t: Tile; className?: strin
           }
         />
       </div>
-      <div className="aw-tile__sub">
+      <div className="sh-tile__sub">
         {t.project} · Module <Roll>{`${t.module.n} / ${t.module.total}`}</Roll>
       </div>
 
-      <Swap id={String(t.module.n)} className="aw-tile__module">
-        <div className="aw-tile__title">{t.module.title}</div>
-        <div className="aw-tile__blurb" data-empty={!t.blurb || undefined}>
+      <Swap id={String(t.module.n)} className="sh-tile__module">
+        <div className="sh-tile__title">{t.module.title}</div>
+        <div className="sh-tile__blurb" data-empty={!t.blurb || undefined}>
           <Roll variant="fade">{t.blurb || 'No blurb yet.'}</Roll>
         </div>
-        <div className="aw-tile__steps">
-          <div className="aw-tile__segments">
+        <div className="sh-tile__steps">
+          <div className="sh-tile__segments">
             {Array.from({ length: t.steps.total }, (_, i) => (
-              <span key={i} className="aw-tile__segment" data-done={i < t.steps.done || undefined} data-failed={t.steps.failed === i + 1 || undefined} />
+              <span key={i} className="sh-tile__segment" data-done={i < t.steps.done || undefined} data-failed={t.steps.failed === i + 1 || undefined} />
             ))}
           </div>
-          <span className="aw-tile__steps-label">
+          <span className="sh-tile__steps-label">
             <Roll align="end">{stepWord}</Roll>
           </span>
         </div>
       </Swap>
 
-      <div className="aw-tile__metric">
-        <div className="aw-tile__value">
-          <span className="aw-tile__metric-name">{t.metric.name}</span>
-          <Count className="aw-tile__number" value={t.metric.best} duration={900} format={(n) => `${num(Math.round(n))} ${t.metric.unit}`} />
+      <div className="sh-tile__metric">
+        <div className="sh-tile__value">
+          <span className="sh-tile__metric-name">{t.metric.name}</span>
+          <Count className="sh-tile__number" value={t.metric.best} duration={900} format={(n) => `${num(Math.round(n))} ${t.metric.unit}`} />
         </div>
-        <span className="aw-tile__target" data-met={met || undefined}>
+        <span className="sh-tile__target" data-met={met || undefined}>
           <Roll align="end">{targetWord}</Roll>
         </span>
       </div>
 
-      <div className="aw-tile__attempts">
-        <span className="aw-tile__dots">
-          {t.attempts.length === 0 && <span className="aw-tile__none">No attempts yet</span>}
+      <div className="sh-tile__attempts">
+        <span className="sh-tile__dots">
+          {t.attempts.length === 0 && <span className="sh-tile__none">No attempts yet</span>}
           {t.attempts.map((v, i) => (
-            <span key={i} className="aw-tile__dot" data-v={v} data-fresh={fresh(i) || undefined} />
+            <span key={i} className="sh-tile__dot" data-v={v} data-fresh={fresh(i) || undefined} />
           ))}
         </span>
-        <Collapse open={t.streak >= 2} reveal="drop" className="aw-tile__streak-wrap">
-          <span className="aw-tile__streak">{Math.max(2, t.streak)} wins in a row</span>
+        <Collapse open={t.streak >= 2} reveal="drop" className="sh-tile__streak-wrap">
+          <span className="sh-tile__streak">{Math.max(2, t.streak)} wins in a row</span>
         </Collapse>
       </div>
 
-      <div className="aw-tile__job" data-on={t.job ? '' : undefined}>
-        <span className="aw-tile__job-mark">
-          {t.job?.busy ? <Spinner size={11} /> : t.job?.verdict && <span className="aw-tile__dot" data-v={t.job.verdict} />}
+      <div className="sh-tile__job" data-on={t.job ? '' : undefined}>
+        <span className="sh-tile__job-mark">
+          {t.job?.busy ? <Spinner size={11} /> : t.job?.verdict && <span className="sh-tile__dot" data-v={t.job.verdict} />}
         </span>
         <Roll variant="fade">{t.job?.label ?? ' '}</Roll>
       </div>
 
-      <div className="aw-tile__time">
-        <Meter value={t.minutesLeft === null ? 0 : Math.min(1, t.minutesLeft / t.maxMinutes)} tone={t.minutesLeft === null ? 'ink' : 'accent'} className="aw-tile__meter" />
+      <div className="sh-tile__time">
+        <Meter value={t.minutesLeft === null ? 0 : Math.min(1, t.minutesLeft / t.maxMinutes)} tone={t.minutesLeft === null ? 'ink' : 'accent'} className="sh-tile__meter" />
         <States
           align="end"
-          className="aw-tile__time-label"
+          className="sh-tile__time-label"
           value={t.minutesLeft === null ? 'note' : 'running'}
           states={{
             note: t.timeNote,
@@ -126,7 +126,7 @@ export function AgentTile({ t, className, target }: { t: Tile; className?: strin
       </div>
 
       <Collapse open={!!t.flag} reveal="drop">
-        <div className="aw-tile__flag">{t.flag ?? ' '}</div>
+        <div className="sh-tile__flag">{t.flag ?? ' '}</div>
       </Collapse>
     </div>
   )
@@ -134,15 +134,15 @@ export function AgentTile({ t, className, target }: { t: Tile; className?: strin
 
 export function FillerTile() {
   return (
-    <div className="aw-tile aw-tile--filler" aria-hidden>
-      <div className="aw-tile__head">
+    <div className="sh-tile sh-tile--filler" aria-hidden>
+      <div className="sh-tile__head">
         <Bar w={58} h={7} tone={3} />
         <Bar w={52} h={18} r={9} tone={1} />
       </div>
-      <div className="aw-tile__sub">
+      <div className="sh-tile__sub">
         <Bar w={96} h={6} tone={2} />
       </div>
-      <div className="aw-tile__module">
+      <div className="sh-tile__module">
         <Bar w={120} h={8} tone={3} />
         <Bar w={150} h={6} tone={2} style={{ marginTop: 10 }} />
       </div>

@@ -11,11 +11,11 @@ import { createHandler } from './http.ts'
 import { createService } from './service.ts'
 import { openStore } from './store.ts'
 
-const dir = mkdtempSync(join(tmpdir(), 'whip-http-'))
+const dir = mkdtempSync(join(tmpdir(), 'sherpa-http-'))
 after(() => rmSync(dir, { recursive: true, force: true }))
 const dashboard = join(dir, 'dashboard')
 mkdirSync(join(dashboard, 'assets'), { recursive: true })
-writeFileSync(join(dashboard, 'index.html'), '<!doctype html><title>Agent Whipper</title>')
+writeFileSync(join(dashboard, 'index.html'), '<!doctype html><title>Sherpa</title>')
 writeFileSync(join(dashboard, 'assets', 'app.js'), 'console.log(1)')
 
 // Stops every server, including one whose test failed partway
@@ -63,7 +63,7 @@ const VERIFIERS = {
 const runs = (commit: string, value: number) => [0, 1, -1, 2, -2].map((k) => ({ commit, value: value + k * 0.2, work: 1000 }))
 
 test('agents, runners and the admin drive a module through HTTP, and the data survives a restart', async () => {
-  const db = join(dir, 'whip.db')
+  const db = join(dir, 'sherpa.db')
   let s = await boot(db)
 
   // Tokens
@@ -156,31 +156,31 @@ test('agents, runners and the admin drive a module through HTTP, and the data su
   const html = { accept: 'text/html' }
   const signin = await s.call('GET', '/agents/1', { token: null, headers: html })
   assert.deepEqual([signin.status, signin.headers.get('www-authenticate')], [401, null])
-  assert.match(signin.text, /<title>Sign in · Agent Whipper/)
+  assert.match(signin.text, /<title>Sign in · Sherpa/)
   assert.equal((await s.call('GET', '/assets/app.js', { token: null })).status, 401)
   const wrong = await s.call('POST', '/signin', { token: null, body: { token: TOKENS.agent } })
-  assert.deepEqual([wrong.status, wrong.json.message], [401, "That's the agent token. The dashboard takes the admin token, WHIP_ADMIN_TOKEN."])
+  assert.deepEqual([wrong.status, wrong.json.message], [401, "That's the agent token. The dashboard takes the admin token, SHERPA_ADMIN_TOKEN."])
   assert.equal(wrong.headers.get('set-cookie'), null)
   assert.equal((await s.call('POST', '/signin', { token: null, body: { token: 'nope' } })).status, 401)
   assert.equal((await s.call('POST', '/signin', { token: null, body: { token: TOKENS.admin }, headers: { origin: 'https://evil.example' } })).status, 403)
   const signed = await s.call('POST', '/signin', { token: null, body: { token: ` ${TOKENS.admin}\n` } })
   assert.equal(signed.status, 204)
   const set = signed.headers.get('set-cookie') ?? ''
-  assert.match(set, /^whip_session=[0-9a-f]{64}; Path=\/; HttpOnly; SameSite=Lax; Max-Age=\d+$/)
+  assert.match(set, /^sherpa_session=[0-9a-f]{64}; Path=\/; HttpOnly; SameSite=Lax; Max-Age=\d+$/)
   assert.equal(set.includes(TOKENS.admin), false, 'the cookie holds a value derived from the token, not the token')
   const cookie = { cookie: `theme=dark; ${set.split(';')[0]}` }
   const page = await s.call('GET', '/agents/1', { token: null, headers: { ...html, ...cookie } })
   assert.equal(page.status, 200)
-  assert.match(page.text, /<title>Agent Whipper/)
+  assert.match(page.text, /<title>Sherpa/)
   const asset = await s.call('GET', '/assets/app.js', { token: null, headers: cookie })
   assert.match(asset.type, /javascript/)
-  assert.equal((await s.call('GET', '/assets/..%2F..%2Fwhip.db', { token: null, headers: cookie })).text.includes('SQLite'), false)
+  assert.equal((await s.call('GET', '/assets/..%2F..%2Fsherpa.db', { token: null, headers: cookie })).text.includes('SQLite'), false)
   assert.equal((await s.call('GET', '/api/board', { token: null, headers: cookie })).status, 200)
-  assert.equal((await s.call('GET', '/api/board', { token: null, headers: { cookie: 'whip_session=' + '0'.repeat(64) } })).status, 401)
+  assert.equal((await s.call('GET', '/api/board', { token: null, headers: { cookie: 'sherpa_session=' + '0'.repeat(64) } })).status, 401)
   // The cookie is the admin's only: it opens no agent call
   assert.equal((await s.call('GET', '/agents/1', { token: null, headers: cookie })).status, 403)
   const out = await s.call('POST', '/signout', { token: null, headers: cookie })
-  assert.deepEqual([out.status, out.headers.get('set-cookie')], [204, 'whip_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'])
+  assert.deepEqual([out.status, out.headers.get('set-cookie')], [204, 'sherpa_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'])
   assert.equal((await s.call('GET', '/signin', { token: null })).status, 405)
 
   // Restart: everything comes back from the database

@@ -1,4 +1,4 @@
-.aw-demo .ss-stage {
+.sh-demo .ss-stage {
   --gutter: 32px;
   --ss-accent-soft: color-mix(in srgb, var(--ss-accent) 20%, transparent);
   overflow: hidden;
@@ -6,7 +6,7 @@
   background: var(--ss-well);
 }
 
-.aw-demo .aw-frame {
+.sh-demo .sh-frame {
   position: absolute;
   top: var(--gutter);
   left: var(--gutter);
@@ -15,7 +15,7 @@
   box-shadow: var(--ss-shadow-hero);
 }
 
-.aw-demo .aw-app {
+.sh-demo .sh-app {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -23,7 +23,7 @@
   background: var(--ss-canvas);
 }
 
-.aw-demo .aw-app__head {
+.sh-demo .sh-app__head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -31,33 +31,33 @@
   flex: none;
 }
 
-.aw-demo .aw-app__title {
+.sh-demo .sh-app__title {
   font-size: 15px;
   font-weight: 600;
   color: var(--ss-text-strong);
 }
 
-.aw-demo .aw-app__meta {
+.sh-demo .sh-app__meta {
   font-size: 12px;
   color: var(--ss-text-faint);
 }
 
-.aw-demo .aw-app__end {
+.sh-demo .sh-app__end {
   margin-left: auto;
 }
 
-.aw-demo .aw-app__body {
+.sh-demo .sh-app__body {
   position: relative;
   flex: 1;
   margin-top: 16px;
   transition: opacity 0.4s ease;
 }
 
-.aw-demo .aw-app__body[data-down] {
+.sh-demo .sh-app__body[data-down] {
   opacity: 0;
 }
 
-.aw-demo .aw-card {
+.sh-demo .sh-card {
   padding: 14px 16px;
   border-radius: 10px;
   background: var(--ss-surface);
@@ -67,17 +67,17 @@
   color: var(--ss-text);
 }
 
-.aw-demo .aw-card__label {
+.sh-demo .sh-card__label {
   font-size: 11px;
   color: var(--ss-text-faint);
 }
 
-.aw-demo .aw-mono {
+.sh-demo .sh-mono {
   font-family: var(--ss-mono);
   font-size: 11.5px;
 }
 
-.aw-demo .aw-line {
+.sh-demo .sh-line {
   opacity: 0;
   transform: translateY(4px);
   transition:
@@ -85,23 +85,23 @@
     transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-.aw-demo .aw-line[data-on] {
+.sh-demo .sh-line[data-on] {
   opacity: 1;
   transform: none;
 }
 
-.aw-demo .aw-line.hook {
+.sh-demo .sh-line.hook {
   color: #8fb8c9;
 }
 
-.aw-demo .aw-line.dim {
+.sh-demo .sh-line.dim {
   color: #63636b;
 }
 
-.aw-demo .aw-icon-ok {
+.sh-demo .sh-icon-ok {
   color: var(--ss-success);
 }
 
-.aw-demo .aw-icon-lock {
+.sh-demo .sh-icon-lock {
   color: var(--ss-icon);
 }

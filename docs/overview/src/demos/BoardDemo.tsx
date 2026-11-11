@@ -93,17 +93,17 @@ async function script(a: Act<S>) {
 
 export function BoardDemo() {
   return (
-    <Stage width={960} height={520} compact={{ below: 640, width: 358, height: 520 }} initial={initial} poster={poster} script={script} className="aw-demo bd" {...LOOK}>
+    <Stage width={960} height={520} compact={{ below: 640, width: 358, height: 520 }} initial={initial} poster={poster} script={script} className="sh-demo bd" {...LOOK}>
       {(s) => (
         <AppFrame
-          url="whip.local"
+          url="sherpa.local"
           title="Board"
           down={false}
           className="bd-frame"
           meta={
             <>
-              <span className="aw-app__meta">6 agents</span>
-              <Badge tone="success" dot className="aw-app__end">
+              <span className="sh-app__meta">6 agents</span>
+              <Badge tone="success" dot className="sh-app__end">
                 Live
               </Badge>
             </>

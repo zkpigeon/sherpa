@@ -14,9 +14,9 @@ export function App() {
       <div className="app-bar">
         <Link href="/" className="app-bar__brand">
           <span className="app-bar__mark" aria-hidden>
-            AW
+            S
           </span>
-          Agent Whipper
+          Sherpa
         </Link>
         {signOut && (
           <button type="button" className="app-bar__action" onClick={() => signOut()}>

@@ -151,7 +151,7 @@ function Timeline({ title, sc, on, geo }: { title: string; sc: Scene; on: boolea
   const WIDTH = geo.width
   const x = (min: number) => LEFT + (min / SPAN) * WIDTH
   return (
-    <div className="aw-card ck-card" data-on={on || undefined} aria-hidden={!on || undefined}>
+    <div className="sh-card ck-card" data-on={on || undefined} aria-hidden={!on || undefined}>
       <div className="ck-head">
         <span className="ck-title">{title}</span>
         <States align="start" value={sc.state} states={BADGE} />
@@ -202,9 +202,9 @@ function Timeline({ title, sc, on, geo }: { title: string; sc: Scene; on: boolea
 
 export function ClockDemo() {
   return (
-    <Stage width={960} height={400} compact={{ below: 640, width: 358, height: 420 }} initial={initial} poster={poster} script={script} className="aw-demo ck" {...LOOK}>
+    <Stage width={960} height={400} compact={{ below: 640, width: 358, height: 420 }} initial={initial} poster={poster} script={script} className="sh-demo ck" {...LOOK}>
       {(s, _rect, layout) => (
-        <AppFrame url="whip.local/agents/1" title="agent 1 · module clock" down={false} meta={<span className="aw-app__meta">minutes since the module became active</span>}>
+        <AppFrame url="sherpa.local/agents/1" title="agent 1 · module clock" down={false} meta={<span className="sh-app__meta">minutes since the module became active</span>}>
           <div className="ck-stack">
             <Timeline title="index layout" sc={s.q} on={s.scene === 0} geo={GEO[layout]} />
             <Timeline title="early termination" sc={s.w} on={s.scene === 1} geo={GEO[layout]} />

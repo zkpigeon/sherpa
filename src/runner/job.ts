@@ -135,7 +135,7 @@ export async function runJob(t: Claimed, d: JobDeps, stop?: AbortSignal): Promis
   let results: JobResults | null
   try {
     const repo = t.repo ?? d.defaultRepo
-    if (!repo) throw new Error('The project names no repo, and the runner has no WHIP_REPO.')
+    if (!repo) throw new Error('The project names no repo, and the runner has no SHERPA_REPO.')
     for (const path of Object.keys(t.files)) if (!safePath(path)) throw new Error(`Refusing the verifier path ${path}.`)
 
     // Check out each commit. A commit under test that can't be fetched is the agent's to fix
@@ -211,8 +211,8 @@ export async function runJob(t: Claimed, d: JobDeps, stop?: AbortSignal): Promis
   } catch (e) {
     // The server refused these results, so say the runner couldn't run the job instead of leaving it to loop
     if (!(e instanceof Refused) || results.outcome === 'error') throw e
-    d.log(`whip-server refused the results of ${t.job}: ${e.message}`)
-    await d.api.results(t.job, d.runner, { outcome: 'error', tests: null, runs: [], touched: [], error: `whip-server refused the results: ${e.message}`.slice(0, 500) })
+    d.log(`sherpa-server refused the results of ${t.job}: ${e.message}`)
+    await d.api.results(t.job, d.runner, { outcome: 'error', tests: null, runs: [], touched: [], error: `sherpa-server refused the results: ${e.message}`.slice(0, 500) })
   }
 }
 

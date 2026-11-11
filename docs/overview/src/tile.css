@@ -1,4 +1,4 @@
-.aw-tile {
+.sh-tile {
   display: flex;
   flex-direction: column;
   padding: 14px 16px 16px;
@@ -9,7 +9,7 @@
   line-height: 1.3;
   color: var(--ss-text);
 
-  .aw-tile__head {
+  .sh-tile__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -17,63 +17,63 @@
     height: 20px;
   }
 
-  .aw-tile__agent {
+  .sh-tile__agent {
     font-size: 13px;
     font-weight: 600;
     color: var(--ss-text-strong);
   }
 
-  .aw-tile__sub {
+  .sh-tile__sub {
     margin-top: 4px;
     color: var(--ss-text-faint);
   }
 
-  .aw-tile__module {
+  .sh-tile__module {
     display: block;
     margin-top: 14px;
   }
 
   /* Swap sizes its content to max-content; the steps bar spans the tile */
-  .aw-tile__module > .ss-swap__in,
-  .aw-tile__module > .ss-swap__out {
+  .sh-tile__module > .ss-swap__in,
+  .sh-tile__module > .ss-swap__out {
     width: 100%;
   }
 
   /* Only a real swap fades: what is on screen at load is already there */
-  .aw-tile__module:not(:has(> .ss-swap__out)) > .ss-swap__in {
+  .sh-tile__module:not(:has(> .ss-swap__out)) > .ss-swap__in {
     animation-name: none;
   }
 
-  .aw-tile__title {
+  .sh-tile__title {
     font-size: 14px;
     font-weight: 600;
     color: var(--ss-text-strong);
   }
 
-  .aw-tile__blurb {
+  .sh-tile__blurb {
     margin-top: 3px;
     color: var(--ss-text);
     white-space: nowrap;
   }
 
-  .aw-tile__blurb[data-empty] {
+  .sh-tile__blurb[data-empty] {
     color: var(--ss-text-faint);
   }
 
-  .aw-tile__steps {
+  .sh-tile__steps {
     display: flex;
     align-items: center;
     gap: 12px;
     margin-top: 14px;
   }
 
-  .aw-tile__segments {
+  .sh-tile__segments {
     display: flex;
     flex: 1;
     gap: 4px;
   }
 
-  .aw-tile__segment {
+  .sh-tile__segment {
     flex: 1;
     height: 6px;
     border-radius: 3px;
@@ -81,21 +81,21 @@
     transition: background-color 0.5s ease;
   }
 
-  .aw-tile__segment[data-done] {
+  .sh-tile__segment[data-done] {
     background: var(--ss-accent);
   }
 
-  .aw-tile__segment[data-failed] {
+  .sh-tile__segment[data-failed] {
     background: var(--ss-danger);
   }
 
-  .aw-tile__steps-label {
+  .sh-tile__steps-label {
     flex: none;
     font-size: 11px;
     color: var(--ss-text-faint);
   }
 
-  .aw-tile__metric {
+  .sh-tile__metric {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -103,18 +103,18 @@
     margin-top: 16px;
   }
 
-  .aw-tile__value {
+  .sh-tile__value {
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
 
-  .aw-tile__metric-name {
+  .sh-tile__metric-name {
     font-size: 11px;
     color: var(--ss-text-faint);
   }
 
-  .aw-tile__number {
+  .sh-tile__number {
     display: block;
     height: 28px;
     font-size: 22px;
@@ -125,25 +125,25 @@
     --ss-count-unit-gap: 0.25em;
   }
 
-  .aw-tile__number .ss-count__unit {
+  .sh-tile__number .ss-count__unit {
     font-size: 13px;
     font-weight: 500;
     color: var(--ss-text-faint);
   }
 
-  .aw-tile__target {
+  .sh-tile__target {
     margin-bottom: 4px;
     font-size: 11px;
     color: var(--ss-text-faint);
     transition: color 0.35s ease;
   }
 
-  .aw-tile__target[data-met] {
+  .sh-tile__target[data-met] {
     color: var(--ss-success-text);
     font-weight: 500;
   }
 
-  .aw-tile__attempts {
+  .sh-tile__attempts {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -152,44 +152,44 @@
     margin-top: 10px;
   }
 
-  .aw-tile__dots {
+  .sh-tile__dots {
     display: flex;
     gap: 6px;
   }
 
-  .aw-tile__none {
+  .sh-tile__none {
     font-size: 11px;
     color: var(--ss-text-faint);
   }
 
-  .aw-tile__dot {
+  .sh-tile__dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     box-sizing: border-box;
   }
 
-  .aw-tile__dot[data-fresh] {
-    animation: aw-dot-in 0.5s cubic-bezier(0.25, 0.8, 0.25, 1) both;
+  .sh-tile__dot[data-fresh] {
+    animation: sh-dot-in 0.5s cubic-bezier(0.25, 0.8, 0.25, 1) both;
   }
 
-  .aw-tile__dot[data-v='win'] {
+  .sh-tile__dot[data-v='win'] {
     background: var(--ss-accent);
   }
 
-  .aw-tile__dot[data-v='flat'] {
+  .sh-tile__dot[data-v='flat'] {
     border: 1.5px solid var(--ss-text-faint);
   }
 
-  .aw-tile__dot[data-v='fail'] {
+  .sh-tile__dot[data-v='fail'] {
     background: var(--ss-danger);
   }
 
-  .aw-tile__streak-wrap {
+  .sh-tile__streak-wrap {
     flex: none;
   }
 
-  .aw-tile__streak {
+  .sh-tile__streak {
     display: inline-flex;
     align-items: center;
     height: 20px;
@@ -202,19 +202,19 @@
     white-space: nowrap;
   }
 
-  .aw-tile__time {
+  .sh-tile__time {
     display: flex;
     align-items: center;
     gap: 12px;
     margin-top: 10px;
   }
 
-  .aw-tile__meter {
+  .sh-tile__meter {
     flex: 1;
     height: 4px;
   }
 
-  .aw-tile__time-label {
+  .sh-tile__time-label {
     flex: none;
     min-width: 72px;
     text-align: right;
@@ -222,7 +222,7 @@
     color: var(--ss-text-faint);
   }
 
-  .aw-tile__job {
+  .sh-tile__job {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -234,11 +234,11 @@
     transition: opacity 0.3s ease;
   }
 
-  .aw-tile__job[data-on] {
+  .sh-tile__job[data-on] {
     opacity: 1;
   }
 
-  .aw-tile__job-mark {
+  .sh-tile__job-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -247,7 +247,7 @@
     flex: none;
   }
 
-  .aw-tile__flag {
+  .sh-tile__flag {
     margin-top: 12px;
     padding: 7px 10px;
     border-radius: 7px;
@@ -257,13 +257,13 @@
     color: var(--ss-warning-text);
   }
 
-  &.aw-tile--filler .aw-tile__module {
+  &.sh-tile--filler .sh-tile__module {
     display: flex;
     flex-direction: column;
   }
 }
 
-@keyframes aw-dot-in {
+@keyframes sh-dot-in {
   from {
     opacity: 0;
     transform: scale(0.4);

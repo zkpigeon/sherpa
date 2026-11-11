@@ -525,7 +525,7 @@ function signIn(token: unknown, tokens: Tokens, req: IncomingMessage): Reply {
   const given = typeof token === 'string' ? token.trim() : ''
   if (given && same(given, tokens.admin)) return { status: 204, headers: { 'set-cookie': sessionCookie(req, sessionOf(tokens.admin)) } }
   const other = given ? (['agent', 'runner'] as const).find((r) => same(given, tokens[r])) : undefined
-  const message = other ? `That's the ${other} token. The dashboard takes the admin token, WHIP_ADMIN_TOKEN.` : "That isn't the admin token. It's WHIP_ADMIN_TOKEN in the server's .env."
+  const message = other ? `That's the ${other} token. The dashboard takes the admin token, SHERPA_ADMIN_TOKEN.` : "That isn't the admin token. It's SHERPA_ADMIN_TOKEN in the server's .env."
   return json({ error: 'wrongToken', message }, 401)
 }
 
@@ -544,7 +544,7 @@ export function createHandler({ service, tokens, dashboard }: HttpOptions) {
       res.writeHead(r.status, headers).end(payload)
     }
     try {
-      const url = new URL(req.url ?? '/', 'http://whip')
+      const url = new URL(req.url ?? '/', 'http://sherpa')
       const method = req.method ?? 'GET'
       const roles = rolesOf(req, tokens)
       if (url.pathname === '/healthz') return send({ status: 200, text: 'ok\n' })
@@ -576,7 +576,7 @@ export function createHandler({ service, tokens, dashboard }: HttpOptions) {
     } catch (e) {
       if (e instanceof HttpError) return send(json({ error: e.code, message: e.message }, e.status))
       console.error(e)
-      send(json({ error: 'internal', message: 'whip-server hit an error. Its log has the details.' }, 500))
+      send(json({ error: 'internal', message: 'sherpa-server hit an error. Its log has the details.' }, 500))
     }
   }
 }

@@ -31,20 +31,20 @@ async function script(a: Act<S>) {
 
 export function FlagsDemo() {
   return (
-    <Stage width={960} height={330} compact={{ below: 640, width: 358, height: 520 }} initial={initial} poster={poster} script={script} className="aw-demo fl" {...LOOK}>
+    <Stage width={960} height={330} compact={{ below: 640, width: 358, height: 520 }} initial={initial} poster={poster} script={script} className="sh-demo fl" {...LOOK}>
       {(s) => (
-        <AppFrame url="whip.local/agents/1" title="agent 1 · attempt a11" down={s.down} meta={<span className="aw-app__meta">early termination · step 2</span>}>
+        <AppFrame url="sherpa.local/agents/1" title="agent 1 · attempt a11" down={s.down} meta={<span className="sh-app__meta">early termination · step 2</span>}>
           <div className="fl-grid">
-            <div className="aw-card fl-files">
-              <div className="aw-card__label">Files the commit changed</div>
+            <div className="sh-card fl-files">
+              <div className="sh-card__label">Files the commit changed</div>
               {FILES.map((f, i) => (
                 <Collapse key={f.path} open={s.files > i}>
                   <div className="fl-file">
-                    <span className="aw-mono fl-path">{f.path}</span>
-                    <span className="aw-mono fl-change">{f.change}</span>
+                    <span className="sh-mono fl-path">{f.path}</span>
+                    <span className="sh-mono fl-change">{f.change}</span>
                     {f.verifier && (
                       <span className="fl-tag" data-on={s.marked || undefined}>
-                        <Icon name="lock" filled size={14} className="aw-icon-lock" />
+                        <Icon name="lock" filled size={14} className="sh-icon-lock" />
                         Frozen verifier, frozen copy used
                       </span>
                     )}
@@ -52,12 +52,12 @@ export function FlagsDemo() {
                 </Collapse>
               ))}
               <div className="fl-verdict">
-                <span className="aw-card__label">Verdict</span>
+                <span className="sh-card__label">Verdict</span>
                 <Badge dot>Flat</Badge>
               </div>
             </div>
-            <div className="aw-card fl-flags">
-              <div className="aw-card__label">Flags</div>
+            <div className="sh-card fl-flags">
+              <div className="sh-card__label">Flags</div>
               <Collapse open={s.flagged} reveal="drop">
                 <div className="fl-flag">
                   <div className="fl-flag__title">a11 touched a verifier file</div>
