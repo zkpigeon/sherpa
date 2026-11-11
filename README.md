@@ -160,7 +160,7 @@ One thing is the same in both: **the agent can never change the benchmark.** The
 | Where a commit runs | Its own bare Docker container | A plain process on the runner's machine, in the checkout |
 | Network | None | The machine's |
 | Toolchain and GPUs | Only what the verifiers' image has | Everything the machine has |
-| Runner's secrets | None reach the job | None reach the job. It sees `HOME`, `PATH`, `LANG`, and a few locale and certificate settings |
+| Runner's secrets | Out of reach | None are passed on: it sees `HOME`, `PATH`, `LANG`, and a few locale and certificate settings. But it can read the runner token, as the runner's user |
 | Files outside the checkout | Out of reach | Readable and writable, as the runner's user |
 | Leftover processes | Killed after every command | The command's process group is killed when it ends |
 | A changed frozen file | Throws the job out | Throws the job out |
@@ -169,9 +169,11 @@ One thing is the same in both: **the agent can never change the benchmark.** The
 
 ### Why strict is the default
 
-A climb is only worth what its measurement is worth. Agents run for hours with nobody reading each commit before the runner executes it. Strict mode makes that safe without trusting the code: the worst an attempt can do is fail.
+A climb is only worth what its measurement is worth. Agents run for hours with nobody reading each commit before the runner executes it. Strict mode keeps each commit's code in its own container, away from the network, the runner's token, and the other commit.
 
 Strict also closes the gaps that checking can't. The check after each command sees a frozen file that changed. It can't see a process that reads the other commit's checkout, or a call to the network that fetches a better answer. In strict mode neither is possible. No network also keeps runs comparable, since there is no remote cache or service that answers faster the second time.
+
+Strict has a limit too. Inside its container, code under test runs as the image's user, root in most images, so a commit built to attack Sherpa could change the tools there. That's rare, and strict doesn't prevent it.
 
 ### When to use open
 
@@ -184,10 +186,11 @@ Use open when the strict sandbox costs more than it protects:
 
 ### What open limits, and what it doesn't
 
-Open keeps the benchmark safe from edits. It doesn't keep the machine safe from the code under test.
+Open catches edits to the frozen tests and benchmark. It doesn't keep the machine, or the runner's token, safe from the code under test.
 
 - Code under test can read any file the runner's user can, and use the network. A read leaves no trace for the runner to check.
-- It can change files outside its checkout. A change to a frozen file is caught. A change to anything else isn't.
+- It can change files outside its checkout. A change to a frozen file is caught. A change to anything else isn't, including one to the other commit's checkout that skews the comparison.
+- It can read the runner token in `.env`, or in the runner's environment, and send results of its own. Open trusts the code not to.
 - A process that leaves its process group on purpose, such as with `setsid`, can outlive its command and slow the next run.
 - Other work on the machine shares the CPU with the benchmark, so expect noisier runs. Raise `runs` in the verifiers if gains come out flat.
 

@@ -145,12 +145,14 @@ Two guards enforce the rule, and they run in both sandboxes.
 
 ### Why strict is the default
 
-Strict isn't there because agents are malicious. It is there because a measurement you can't trust is worse than no measurement, and the cheap way to trust one is to make tampering impossible rather than detectable.
+Strict isn't there because agents are malicious. It is there because a measurement you can't trust is worse than no measurement, and the cheap way to trust one is to put the judging out of the code's reach rather than detect tampering.
 
-- **The agent runs unattended for hours.** Nobody reads each commit before the runner executes it. A strict runner makes that safe without trust: the worst an attempt can do is fail.
+- **The agent runs unattended for hours.** Nobody reads each commit before the runner executes it. A strict runner keeps each commit's code in its own container, away from the network, the runner's token, and the other commit.
 - **Detection has gaps that isolation doesn't.** The check after each command sees a changed file. It can't see a process that reads the other commit's checkout, or a call out to the network that fetches a better answer. In strict mode neither is possible.
 - **Results stay comparable.** No network means no remote cache, no service that answers faster on the second run, and no download that times differently from one job to the next.
 - **The runner's machine is safe.** Code from the commit can't read files outside its checkout, reach other services, or use the Docker socket.
+
+Strict has a limit too. Inside its container, code under test runs as the image's user, root in most images, so a commit built to attack Sherpa could change the tools there, the file check included. Like any attack on Sherpa itself, that is rare, and v1 doesn't prevent it.
 
 ### When open is the better trade
 
@@ -164,7 +166,8 @@ Open is for setups where the strict sandbox costs more than it protects.
 ### What open gives up
 
 - **Network.** Code under test can reach the network. A benchmark that depends on remote state can drift between runs, and code could fetch data it shouldn't use.
-- **The machine.** Code under test runs as the runner's user. It can read any file that user can, and it can change files outside the checkout, including the other commit's checkout. The check after each command catches a change to a frozen file. It doesn't catch a read.
+- **The machine.** Code under test runs as the runner's user. It can read any file that user can, and it can change files outside the checkout, including the other commit's checkout. The check after each command catches a change to a frozen file. It doesn't catch a read, or a change to anything else.
+- **The runner's token.** The runner's user can read the runner token, in `.env` and in the runner's own environment, so code under test could send results of its own. Open trusts the code not to.
 - **Leftovers.** A process that leaves its process group on purpose, such as with `setsid`, can outlive its command and slow the next run.
 - **Benchmark stability.** Other work on the machine shares the CPU with the benchmark. `SHERPA_CPUSET` and `SHERPA_MEMORY` apply only to strict containers.
 
