@@ -14,7 +14,7 @@ import { dockerExecutor, localExecutor, type Executor } from './exec.ts'
 import { createGit } from './git.ts'
 import { benchRun, createApi, lastJson, runJob, testCount, type JobDeps } from './job.ts'
 
-const root = mkdtempSync(join(tmpdir(), 'whip-runner-'))
+const root = mkdtempSync(join(tmpdir(), 'sherpa-runner-'))
 after(() => rmSync(root, { recursive: true, force: true }))
 const TOKENS = { agent: 'agent-token-0123456789', runner: 'runner-token-0123456789', admin: 'admin-token-0123456789' }
 

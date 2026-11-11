@@ -74,7 +74,7 @@
     --gutter: 16px;
   }
 
-  & .ss-stage[data-layout='compact'] .aw-app {
+  & .ss-stage[data-layout='compact'] .sh-app {
     padding: 14px 14px 0;
   }
 

@@ -21,13 +21,13 @@ export async function reset<S extends Looped>(a: Act<S>, initial: S) {
 
 export function AppFrame({ url, title, meta, down, className, children }: { url: string; title: string; meta?: ReactNode; down: boolean; className?: string; children: ReactNode }) {
   return (
-    <Window url={url} urlShape="pill" className={`aw-frame${className ? ` ${className}` : ''}`}>
-      <div className="aw-app">
-        <div className="aw-app__head">
-          <div className="aw-app__title">{title}</div>
+    <Window url={url} urlShape="pill" className={`sh-frame${className ? ` ${className}` : ''}`}>
+      <div className="sh-app">
+        <div className="sh-app__head">
+          <div className="sh-app__title">{title}</div>
           {meta}
         </div>
-        <div className="aw-app__body" data-down={down || undefined}>
+        <div className="sh-app__body" data-down={down || undefined}>
           {children}
         </div>
       </div>
@@ -39,7 +39,7 @@ export function TermLines({ lines, n }: { lines: { text: string; kind?: 'dim' | 
   return (
     <>
       {lines.map((l, i) => (
-        <div key={i} className={`aw-line${l.kind ? ` ${l.kind}` : ''}`} data-on={i < n || undefined}>
+        <div key={i} className={`sh-line${l.kind ? ` ${l.kind}` : ''}`} data-on={i < n || undefined}>
           {l.text}
         </div>
       ))}

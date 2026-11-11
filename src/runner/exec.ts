@@ -38,12 +38,12 @@ export interface DockerOptions {
 export function dockerExecutor({ runner = 'runner', cpuset, memory, docker = 'docker' }: DockerOptions = {}): Executor {
   return {
     async sweep() {
-      const ids = (await run(docker, ['ps', '-aq', '--filter', `label=whip.runner=${runner}`])).stdout.split('\n').filter(Boolean)
+      const ids = (await run(docker, ['ps', '-aq', '--filter', `label=sherpa.runner=${runner}`])).stdout.split('\n').filter(Boolean)
       if (ids.length) await run(docker, ['rm', '-f', ...ids])
       return ids.length
     },
     async open(dir, job) {
-      const args = ['create', '--network', 'none', '--pids-limit', '4096', '--workdir', '/work', '--label', `whip.job=${job.job}`, '--label', `whip.runner=${runner}`, '--entrypoint', 'sleep']
+      const args = ['create', '--network', 'none', '--pids-limit', '4096', '--workdir', '/work', '--label', `sherpa.job=${job.job}`, '--label', `sherpa.runner=${runner}`, '--entrypoint', 'sleep']
       if (cpuset) args.push('--cpuset-cpus', cpuset)
       if (memory) args.push('--memory', memory)
       if (job.hardware === 'gpu') args.push('--gpus', 'all')

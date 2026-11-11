@@ -1,4 +1,4 @@
-// What whip-server stores, as plain JSON-safe data. Everything DESIGN.md says
+// What sherpa-server stores, as plain JSON-safe data. Everything DESIGN.md says
 // the server derives (the baseline, start, best and head commits, the streak,
 // waits, extensions and the deadline) is computed in queries.ts and never
 // stored, so the numbers can't drift apart. Nothing here touches I/O, so the

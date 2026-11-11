@@ -1,7 +1,7 @@
 import type { AgentId, AttemptDetail, AttemptId, Board, ChangeId, ChangeReview, ModuleId } from '../../shared/api.ts'
 
 /**
- * Where the dashboard's data comes from: whip-server over HTTP, or the mock.
+ * Where the dashboard's data comes from: sherpa-server over HTTP, or the mock.
  * `current` and `attempt` must return the same object until the data changes,
  * because React compares snapshots by identity.
  */

@@ -30,7 +30,7 @@ async function script(a: Act<S>) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="gl-field">
-      <span className="aw-card__label">{label}</span>
+      <span className="sh-card__label">{label}</span>
       <span className="gl-value">{children}</span>
     </div>
   )
@@ -38,11 +38,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 export function GoalDemo() {
   return (
-    <Stage width={960} height={340} compact={{ below: 640, width: 358, height: 560 }} initial={initial} poster={poster} script={script} className="aw-demo gl" {...LOOK}>
+    <Stage width={960} height={340} compact={{ below: 640, width: 358, height: 560 }} initial={initial} poster={poster} script={script} className="sh-demo gl" {...LOOK}>
       {(s) => (
-        <AppFrame url="whip.local/agents/1/modules/m5" title="early termination · goal" down={s.down} meta={<span className="aw-app__meta">m5</span>}>
+        <AppFrame url="sherpa.local/agents/1/modules/m5" title="early termination · goal" down={s.down} meta={<span className="sh-app__meta">m5</span>}>
           <div className="gl-grid">
-            <div className="aw-card gl-goal">
+            <div className="sh-card gl-goal">
               <Field label="Metric">p95 latency, lower is better</Field>
               <Field label="Target gain">
                 <States
@@ -84,19 +84,19 @@ export function GoalDemo() {
               </Field>
             </div>
 
-            <div className="aw-card gl-log">
-              <div className="aw-card__label">Requests</div>
+            <div className="sh-card gl-log">
+              <div className="sh-card__label">Requests</div>
               <Collapse open={s.tries >= 1} reveal="drop">
                 <div className="gl-req" data-v="no">
-                  <span className="aw-mono">targetGain 30</span>
+                  <span className="sh-mono">targetGain 30</span>
                   <span className="gl-req__result">422 · over the 20% cap</span>
                 </div>
               </Collapse>
               <Collapse open={s.tries >= 2} reveal="drop">
                 <div className="gl-req" data-v="ok">
-                  <span className="aw-mono">targetGain 10</span>
+                  <span className="sh-mono">targetGain 10</span>
                   <span className="gl-req__result gl-with-icon">
-                    <Icon name="check" filled size={14} className="aw-icon-ok" />
+                    <Icon name="check" filled size={14} className="sh-icon-ok" />
                     201 · goal set
                   </span>
                 </div>

@@ -1,8 +1,8 @@
-# Working under Agent Whipper
+# Working under Sherpa
 
-These are the instructions for an agent whose hill climb Agent Whipper keeps on track, and for the verifier agent that writes its tests and benchmark. `scripts/connect.sh` copies them into the agent's checkout as `.whip/guide.md`.
+These are the instructions for an agent whose hill climb Sherpa keeps on track, and for the verifier agent that writes its tests and benchmark. `scripts/connect.sh` copies them into the agent's checkout as `.sherpa/guide.md`.
 
-Every call carries the agent token. Load your settings with `. .whip/env` in the checkout. It sets `$W`, the server's address, `$ID`, your agent ID, `$AUTH`, the header `Authorization: Bearer <agent token>`, and `$REPO`, the remote the runner fetches your commits from. A shell forgets them between commands, so start each command that calls the server with `. .whip/env &&`. Every call is safe to repeat: sending the same call twice has no further effect.
+Every call carries the agent token. Load your settings with `. .sherpa/env` in the checkout. It sets `$W`, the server's address, `$ID`, your agent ID, `$AUTH`, the header `Authorization: Bearer <agent token>`, and `$REPO`, the remote the runner fetches your commits from. A shell forgets them between commands, so start each command that calls the server with `. .sherpa/env &&`. Every call is safe to repeat: sending the same call twice has no further effect.
 
 ## Your board line
 
@@ -66,10 +66,10 @@ curl -sS -X PUT "$W/agents/$ID/blurb" -H "$AUTH" -H 'content-type: text/plain' -
 
 ## Submit every attempt as a commit
 
-You never report a number. For each attempt, commit your change on top of the module's head commit and push it to the remote `whip`, under a ref named after the commit. That keeps it fetchable after you reset your branch, and it never needs `--force`:
+You never report a number. For each attempt, commit your change on top of the module's head commit and push it to the remote `sherpa`, under a ref named after the commit. That keeps it fetchable after you reset your branch, and it never needs `--force`:
 
 ```sh
-git push -q whip "HEAD:refs/whip/$(git rev-parse HEAD)"
+git push -q sherpa "HEAD:refs/sherpa/$(git rev-parse HEAD)"
 ```
 
 Then post it with the commit's full hash:

@@ -12,7 +12,7 @@ RUN npm run build
 
 FROM node:26-slim AS server
 WORKDIR /app
-ENV WHIP_HOST=0.0.0.0 WHIP_PORT=8080 WHIP_DB=/data/whip.db WHIP_DASHBOARD=/app/dist/dashboard
+ENV SHERPA_HOST=0.0.0.0 SHERPA_PORT=8080 SHERPA_DB=/data/sherpa.db SHERPA_DASHBOARD=/app/dist/dashboard
 COPY package.json ./
 COPY src ./src
 COPY --from=build /app/dist ./dist
@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 RUN git config --system --add safe.directory '/repos/*'
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 WORKDIR /app
-ENV WHIP_WORK=/work
+ENV SHERPA_WORK=/work
 COPY package.json ./
 COPY src ./src
 # The runner talks to the host's Docker daemon, which takes root; job containers get none of this

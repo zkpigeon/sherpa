@@ -67,7 +67,7 @@ function Verifiers({ m, state }: { m: Mod; state: V }) {
         ),
         frozen: (
           <span className="pl-with-icon">
-            <Icon name="lock" filled size={14} className="aw-icon-lock" />
+            <Icon name="lock" filled size={14} className="sh-icon-lock" />
             {m.tests} tests · benchmark
           </span>
         ),
@@ -117,22 +117,22 @@ function Row({ m, pos, s }: { m: Mod; pos: number; s: S }) {
 
 export function PlanDemo() {
   return (
-    <Stage width={960} height={400} compact={{ below: 640, width: 358, height: 480 }} initial={initial} poster={poster} script={script} className="aw-demo pl" {...LOOK}>
+    <Stage width={960} height={400} compact={{ below: 640, width: 358, height: 480 }} initial={initial} poster={poster} script={script} className="sh-demo pl" {...LOOK}>
       {(s) => {
         const shift = s.inserted ? 1 : 0
         return (
           <AppFrame
-            url="whip.local/agents/1"
+            url="sherpa.local/agents/1"
             title="agent 1 · search-perf"
             down={s.down}
             className="pl-frame"
             meta={
-              <span className="aw-app__meta">
+              <span className="sh-app__meta">
                 <Roll>{`${PLAN.length + shift} modules`}</Roll>
               </span>
             }
           >
-            <div className="aw-card pl-list">
+            <div className="sh-card pl-list">
               <Row m={PLAN[0]} pos={1} s={s} />
               <Collapse open={s.inserted}>
                 <Row m={NEW} pos={2} s={s} />

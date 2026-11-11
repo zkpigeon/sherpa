@@ -43,14 +43,14 @@ const TONE = { win: 'success', flat: 'neutral', fail: 'danger' } as const
 
 export function CommitsDemo() {
   return (
-    <Stage width={960} height={380} compact={{ below: 640, width: 358, height: 400 }} initial={initial} poster={poster} script={script} className="aw-demo cm" {...LOOK}>
+    <Stage width={960} height={380} compact={{ below: 640, width: 358, height: 400 }} initial={initial} poster={poster} script={script} className="sh-demo cm" {...LOOK}>
       {(s, _rect, layout) => {
         const NODES_ = NODES[layout]
         const [n2, n3] = [NODES_[2], NODES_[3]]
         const bend = (n3.x - n2.x) / 2
         return (
-        <AppFrame url="whip.local/agents/1/modules/m5" title="early termination · commits" down={s.down} meta={<span className="aw-app__meta">m5</span>}>
-          <div className="aw-card cm-card">
+        <AppFrame url="sherpa.local/agents/1/modules/m5" title="early termination · commits" down={s.down} meta={<span className="sh-app__meta">m5</span>}>
+          <div className="sh-card cm-card">
             <div className="cm-line" style={{ left: NODES_[0].x, width: NODES_[Math.min(s.shown, 2)].x - NODES_[0].x }} />
             <svg className="cm-branch" data-on={s.shown >= 3 || undefined} width="100%" height="240" aria-hidden>
               <path d={`M${n2.x} ${n2.y} C ${n2.x + bend} ${n2.y}, ${n3.x - bend} ${n3.y}, ${n3.x} ${n3.y}`} />
@@ -63,7 +63,7 @@ export function CommitsDemo() {
                   <span className="cm-dot" data-busy={on && i > 0 && !judged ? '' : undefined} />
                   <div className="cm-label">
                     <span className="cm-attempt">{n.attempt}</span>
-                    <span className="aw-mono cm-commit">{n.commit}</span>
+                    <span className="sh-mono cm-commit">{n.commit}</span>
                   </div>
                   {n.verdict && (
                     <div className="cm-verdict" data-on={judged || undefined}>

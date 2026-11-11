@@ -7,7 +7,7 @@ import { App } from './App.tsx'
 import { SourceProvider } from './data/hooks.tsx'
 import type { BoardSource } from './data/source.ts'
 
-// whip-server serves the built dashboard; the hosted demo and `npm run dev` use the mock
+// sherpa-server serves the built dashboard; the hosted demo and `npm run dev` use the mock
 const data = import.meta.env.VITE_DATA ?? (import.meta.env.DEV ? 'mock' : 'http')
 
 async function sourceFor(): Promise<BoardSource> {
@@ -26,5 +26,5 @@ try {
     </StrictMode>,
   )
 } catch (e) {
-  root.render(<p className="empty">Couldn’t load the board from whip-server: {(e as Error).message}</p>)
+  root.render(<p className="empty">Couldn’t load the board from sherpa-server: {(e as Error).message}</p>)
 }

@@ -43,9 +43,9 @@ function Page() {
   return (
     <main className="pg">
       <header className="pg-header">
-        <h1>Agent Whipper</h1>
+        <h1>Sherpa</h1>
         <p className="pg-lead">
-          Agent Whipper keeps long-running agents on track overnight. Each agent splits its hill climb into modules and steps, and submits every attempt as a commit. A runner measures the commit with tests and a benchmark the agent can't change, and the server decides when a module passes, gets stuck, or runs out of time.
+          Sherpa keeps long-running agents on track overnight. Each agent splits its hill climb into modules and steps, and submits every attempt as a commit. A runner measures the commit with tests and a benchmark the agent can't change, and the server decides when a module passes, gets stuck, or runs out of time.
         </p>
         <p className="pg-meta">Design overview, November 2026. Nothing is built yet, and every number in the demos is made up.</p>
       </header>
@@ -142,7 +142,7 @@ function Page() {
 
       <section>
         <h2>The dashboard flags what doesn't add up</h2>
-        <p>The runner blocks the cheats that look like normal work: editing a test, loosening the benchmark, keeping the best run, or marking a step done without doing it. An agent that leaves its task to attack the whipper itself is rare, so the dashboard flags the traces instead. It flags a commit that touches a verifier file, fewer tests running than before, a benchmark run that did less work, a verdict with no runner job behind it, and verifiers written by the agent that works the module.</p>
+        <p>The runner blocks the cheats that look like normal work: editing a test, loosening the benchmark, keeping the best run, or marking a step done without doing it. An agent that leaves its task to attack Sherpa itself is rare, so the dashboard flags the traces instead. It flags a commit that touches a verifier file, fewer tests running than before, a benchmark run that did less work, a verdict with no runner job behind it, and verifiers written by the agent that works the module.</p>
       </section>
 
       <Figure demo={<FlagsDemo />}>
@@ -179,7 +179,7 @@ function Page() {
         <h2>The stack</h2>
         <ul>
           <li>TypeScript on Node 26 for both services, with SQLite through the built-in <code>node:sqlite</code>.</li>
-          <li>One Docker Compose file with two services, <code>whip-server</code> and <code>whip-runner</code>, self-hosted on a home machine or a VPS.</li>
+          <li>One Docker Compose file with two services, <code>sherpa-server</code> and <code>sherpa-runner</code>, self-hosted on a home machine or a VPS.</li>
           <li>The database lives in a volume only the server mounts, outside any folder an agent works in.</li>
           <li>Commits live in a git remote that both the agents and the runner can reach.</li>
         </ul>

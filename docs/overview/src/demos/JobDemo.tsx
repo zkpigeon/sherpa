@@ -48,7 +48,7 @@ function Cell({ on, children }: { on: boolean; children: string }) {
 function Check({ on, label, value }: { on: boolean; label: string; value: string }) {
   return (
     <div className="jb-check" data-on={on || undefined}>
-      <span className="aw-card__label">{label}</span>
+      <span className="sh-card__label">{label}</span>
       <span className="jb-check__value">{value}</span>
     </div>
   )
@@ -56,18 +56,18 @@ function Check({ on, label, value }: { on: boolean; label: string; value: string
 
 export function JobDemo() {
   return (
-    <Stage width={960} height={350} compact={{ below: 640, width: 358, height: 520 }} initial={initial} poster={poster} script={script} className="aw-demo jb" {...LOOK}>
+    <Stage width={960} height={350} compact={{ below: 640, width: 358, height: 520 }} initial={initial} poster={poster} script={script} className="sh-demo jb" {...LOOK}>
       {(s) => (
         <AppFrame
-          url="whip.local/jobs/7f3a"
+          url="sherpa.local/jobs/7f3a"
           title="Attempt a10"
           down={s.down}
           meta={
             <>
-              <span className="aw-app__meta">agent 1 · early termination · step 2</span>
+              <span className="sh-app__meta">agent 1 · early termination · step 2</span>
               <States
                 align="end"
-                className="aw-app__end"
+                className="sh-app__end"
                 value={s.verdict ? 'judged' : 'running'}
                 states={{
                   running: (
@@ -82,20 +82,20 @@ export function JobDemo() {
           }
         >
           <div className="jb-grid">
-            <div className="aw-card jb-side">
-              <div className="aw-card__label">Checkouts</div>
+            <div className="sh-card jb-side">
+              <div className="sh-card__label">Checkouts</div>
               <div className="jb-commit">
-                <span className="aw-mono">9f3c</span>
+                <span className="sh-mono">9f3c</span>
                 <span className="jb-faint">best commit</span>
               </div>
               <div className="jb-commit">
-                <span className="aw-mono">a10e</span>
+                <span className="sh-mono">a10e</span>
                 <span className="jb-faint">new commit</span>
               </div>
               <div className="jb-rule" />
               <div className="jb-line">
-                <Icon name="lock" filled size={14} className="aw-icon-lock" />
-                Frozen verifiers <span className="aw-mono">7c1e</span> copied over both
+                <Icon name="lock" filled size={14} className="sh-icon-lock" />
+                Frozen verifiers <span className="sh-mono">7c1e</span> copied over both
               </div>
               <div className="jb-line">
                 <States
@@ -110,7 +110,7 @@ export function JobDemo() {
                     ),
                     passed: (
                       <span className="jb-with-icon">
-                        <Icon name="check" filled size={14} className="aw-icon-ok" />
+                        <Icon name="check" filled size={14} className="sh-icon-ok" />
                         42 tests passed
                       </span>
                     ),
@@ -119,11 +119,11 @@ export function JobDemo() {
               </div>
             </div>
 
-            <div className="aw-card jb-runs">
+            <div className="sh-card jb-runs">
               <div className="jb-table">
-                <span className="aw-card__label">Run</span>
-                <span className="aw-card__label jb-num">Best 9f3c</span>
-                <span className="aw-card__label jb-num">New a10e</span>
+                <span className="sh-card__label">Run</span>
+                <span className="sh-card__label jb-num">Best 9f3c</span>
+                <span className="sh-card__label jb-num">New a10e</span>
                 {BEST.map((b, i) => (
                   <div key={i} className="jb-tr">
                     <span className="jb-faint">{i + 1}</span>
@@ -141,7 +141,7 @@ export function JobDemo() {
                 <Check on={s.gain} label="Gain" value="5.7% faster, needs 2%" />
                 <Check on={s.rank} label="Rank test" value="p = 0.004, needs below 0.05" />
                 <div className="jb-check" data-on={s.verdict || undefined}>
-                  <span className="aw-card__label">Verdict</span>
+                  <span className="sh-card__label">Verdict</span>
                   <Badge tone="success" dot>
                     Win
                   </Badge>

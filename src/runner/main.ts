@@ -1,4 +1,4 @@
-// whip-runner: claims jobs from whip-server one at a time and runs each in
+// sherpa-runner: claims jobs from sherpa-server one at a time and runs each in
 // throwaway containers. Configured by environment variables; see .env.example.
 import { hostname } from 'node:os'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -14,24 +14,24 @@ const need = (name: string) => {
   return v
 }
 
-const server = need('WHIP_URL').replace(/\/$/, '')
-const runner = env.WHIP_RUNNER_NAME?.trim() || hostname()
-const labels = (env.WHIP_LABELS ?? 'cpu').split(',').map((l) => l.trim()).filter(Boolean)
-const work = resolve(env.WHIP_WORK ?? '/tmp/whip-runner')
-const pollMs = Number(env.WHIP_POLL_SECONDS ?? 5) * 1000
-const local = env.WHIP_EXECUTOR === 'local'
-if (local) console.warn('WHIP_EXECUTOR=local runs jobs on this machine without a container. Use it for tests only.')
+const server = need('SHERPA_URL').replace(/\/$/, '')
+const runner = env.SHERPA_RUNNER_NAME?.trim() || hostname()
+const labels = (env.SHERPA_LABELS ?? 'cpu').split(',').map((l) => l.trim()).filter(Boolean)
+const work = resolve(env.SHERPA_WORK ?? '/tmp/sherpa-runner')
+const pollMs = Number(env.SHERPA_POLL_SECONDS ?? 5) * 1000
+const local = env.SHERPA_EXECUTOR === 'local'
+if (local) console.warn('SHERPA_EXECUTOR=local runs jobs on this machine without a container. Use it for tests only.')
 
-const git = createGit(resolve(work, 'repos'), env.WHIP_GIT_PROTOCOLS)
+const git = createGit(resolve(work, 'repos'), env.SHERPA_GIT_PROTOCOLS)
 const deps: JobDeps = {
-  api: createApi(server, need('WHIP_RUNNER_TOKEN')),
-  executor: local ? localExecutor : dockerExecutor({ runner, ...(env.WHIP_CPUSET ? { cpuset: env.WHIP_CPUSET } : {}), ...(env.WHIP_MEMORY ? { memory: env.WHIP_MEMORY } : {}) }),
+  api: createApi(server, need('SHERPA_RUNNER_TOKEN')),
+  executor: local ? localExecutor : dockerExecutor({ runner, ...(env.SHERPA_CPUSET ? { cpuset: env.SHERPA_CPUSET } : {}), ...(env.SHERPA_MEMORY ? { memory: env.SHERPA_MEMORY } : {}) }),
   checkout: git.checkout,
   changed: git.changed,
   runner,
   work,
-  defaultRepo: env.WHIP_REPO?.trim() || null,
-  renewEveryMs: Number(env.WHIP_RENEW_SECONDS ?? 30) * 1000,
+  defaultRepo: env.SHERPA_REPO?.trim() || null,
+  renewEveryMs: Number(env.SHERPA_RENEW_SECONDS ?? 30) * 1000,
   log: (m) => console.log(`[${new Date().toISOString()}] ${m}`),
 }
 

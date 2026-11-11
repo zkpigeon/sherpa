@@ -1,7 +1,7 @@
-// whip-server's database, through node:sqlite. The world lives in memory and
+// sherpa-server's database, through node:sqlite. The world lives in memory and
 // is written back as one JSON document per agent, only for the agents whose
 // document changed. Verifier files are kept by hash, and every call that
-// could change something is logged. whip-server is the only writer.
+// could change something is logged. sherpa-server is the only writer.
 import { DatabaseSync } from 'node:sqlite'
 import { emptyWorld, type AgentRec, type World } from './domain/records.ts'
 

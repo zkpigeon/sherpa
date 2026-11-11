@@ -23,7 +23,7 @@
     --gutter: 16px;
   }
 
-  & .ss-stage[data-layout='compact'] .aw-app {
+  & .ss-stage[data-layout='compact'] .sh-app {
     padding: 14px 14px 0;
   }
 
@@ -33,7 +33,7 @@
   }
 
   & .ss-stage[data-layout='compact'] .bd-wide-only,
-  & .ss-stage[data-layout='compact'] .aw-tile--filler {
+  & .ss-stage[data-layout='compact'] .sh-tile--filler {
     display: none;
   }
 }

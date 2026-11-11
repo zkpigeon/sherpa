@@ -9,7 +9,7 @@ export interface Crumb {
 /** The page's one h1, with its trail of links back, its meta and anything pinned to the end. */
 export function PageHead({ title, docTitle, crumbs = [], meta, end }: { title: ReactNode; docTitle: string; crumbs?: Crumb[]; meta?: ReactNode; end?: ReactNode }) {
   useEffect(() => {
-    document.title = `${docTitle} · Agent Whipper`
+    document.title = `${docTitle} · Sherpa`
   }, [docTitle])
   return (
     <header className="page-head">

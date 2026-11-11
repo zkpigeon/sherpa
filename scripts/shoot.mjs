@@ -21,7 +21,7 @@ const token = flag('token', null)
 
 const browser = await puppeteer.launch({ browser: 'firefox', executablePath: process.env.FIREFOX_PATH ?? '/usr/bin/firefox', headless: true })
 const page = await browser.newPage()
-// Without a token, whip-server shows its sign-in page
+// Without a token, sherpa-server shows its sign-in page
 if (token) await page.setExtraHTTPHeaders({ authorization: `Bearer ${token}` })
 const notes = []
 page.on('console', (m) => {
