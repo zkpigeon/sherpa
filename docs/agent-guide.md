@@ -52,7 +52,7 @@ curl -sS -X POST "$W/agents/$ID/projects" -H "$AUTH" -H 'content-type: applicati
 }'
 ```
 
-`repo` is your `$REPO`, and `startCommit` a full hash from `git rev-parse HEAD`, pushed as below. The answer lists the module IDs, such as `m1` and `m2`. Calls name a module by its ID, which never changes. While a project is open, a new project waits in your queue and starts only when a human stops the open one. So new work goes in as a module, right after the current one and behind any you added earlier that haven't started. The answer gives its position:
+`repo` is your `$REPO`, and `startCommit` a full hash from `git rev-parse HEAD`, pushed as below. The answer lists the module IDs, such as `m1` and `m2`. Calls name a module by its ID, which never changes. While a project is open, a new project waits in your queue and starts only when the open one ends, because a human stopped it or its hours ran out. So new work goes in as a module, right after the current one and behind any you added earlier that haven't started. The answer gives its position:
 
 ```sh
 curl -sS -X POST "$W/agents/$ID/modules" -H "$AUTH" -H 'content-type: application/json' \
