@@ -223,7 +223,7 @@ test('the third failed turn on a step makes the module stuck, and abandoning it 
   const m = viewOf(w, 'm1', at(20))
   assert.deepEqual(m.status, { state: 'stuck', cause: 'step' })
   assert.equal(m.steps[0]!.failedTurns, 3)
-  assert.equal(boardOf(w, at(20)).agents[0]!.line.endsWith('Stuck, waiting for an abandon reason.'), true)
+  assert.equal(boardOf(w, at(20)).agents[0]!.line.endsWith('Stuck. Abandon it with a reason now, then move on.'), true)
   rejects(w, at(21), (x) => postAttempt(x, at(21), { agent: 'a', module: 'm1', attempt: 'a4', commit: commit('a4'), note: 'Again.' }), 'wrongState')
   rejects(w, at(21), (x) => stepDone(x, at(21), { agent: 'a', module: 'm1', step: 1 }), 'wrongState')
   rejects(w, at(21), (x) => abandon(x, at(21), { agent: 'a', module: 'm1', reason: 'Nothing worked.', followUp: mod('cache retry') }), 'followUpNotAllowed')
@@ -741,7 +741,7 @@ test('abandoning a module says where the next one starts', () => {
   const r = must(abandon(w, at(6), { agent: 'a', module: 'm1', reason: 'Nothing here moves latency.' }))
   assert.deepEqual(r, { followUp: null, startsFrom: START }, 'a flat attempt is dropped with the module')
   must(freezeVerifiers(w, at(7), { agent: 'a', module: 'm2', author: 'verifier', verifiers: verifiers(1, 'h2') }))
-  assert.match(boardOf(w, at(7)).agents[0]!.line, new RegExp(`Waiting for its baseline\\. It starts from ${START.slice(0, 7)}\\.$`))
+  assert.match(boardOf(w, at(7)).agents[0]!.line, new RegExp(`Waiting for its baseline\\. It starts from ${START.slice(0, 7)}\\. Meanwhile, read the module and plan its first attempt\\.`))
 })
 
 test('results.tsv has a line for every attempt and every abandoned module, oldest project first', () => {
@@ -795,7 +795,7 @@ test('meeting the project goal keeps the project open, and the agent keeps climb
   must(createProject(w, at(0), { agent: 'a', spec: WITH_GOAL({ target: 90 }) }))
   must(freezeVerifiers(w, at(0), { agent: 'a', module: 'm1', author: 'verifier', verifiers: verifiers(1) }))
   run(w, at(1), 100)
-  assert.match(lineOf(w, at(2)), /Project goal: p95 latency 100 -> 90 ms\. Last module in the project\. 89 min left\.$/)
+  assert.match(lineOf(w, at(2)), /Project goal: p95 latency 100 -> 90 ms\. Last module in the project\. Plan the next one before this one ends\. 89 min left\.$/)
   attempt(w, at(5), 'a1', 88)
   assert.equal(attemptStatusOf(w, 'a', 'm1', 'a1', at(5))!.lastModule, true)
   measure(w, at(6), 100, 88)

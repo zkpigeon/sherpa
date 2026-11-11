@@ -128,7 +128,7 @@ test('agents, runners and the admin drive a module through HTTP, and the data su
   assert.deepEqual(await s.call('GET', '/agents/9').then((r) => [r.status, r.text]), [200, 'agent 9: no open project\n'])
   const line = await s.call('GET', '/agents/1')
   assert.equal(line.type, 'text/plain; charset=utf-8')
-  assert.equal(line.text, 'agent 1: Project: search-perf, Module (1 / 1): query cache, Progress: 0 / 1, Blurb: Caching parsed queries. Goal: p95 latency 100 -> 90 ms, 10% lower. Last module in the project. 90 min left.\n')
+  assert.equal(line.text, 'agent 1: Project: search-perf, Module (1 / 1): query cache, Progress: 0 / 1, Blurb: Caching parsed queries. Goal: p95 latency 100 -> 90 ms, 10% lower. Last module in the project. Plan the next one before this one ends. 90 min left.\n')
 
   tick(5)
   const posted = await s.call('POST', '/agents/1/modules/m1/attempts', { body: { attemptId: 'a1', commit: NEXT, note: 'Cache parsed query trees.' } })

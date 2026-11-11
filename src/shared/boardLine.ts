@@ -14,6 +14,10 @@ function goal(m: Module) {
   return `Goal: ${g.metric} ${round(g.baseline)} -> ${round(g.target)} ${g.unit}, ${change}.${best}`
 }
 
+// Every wait names something useful to do meanwhile, so the agent never stops to ask
+const WHILE_VERIFIERS = "Meanwhile, plan the next module, or work ahead on this one's first step."
+const NOTHING_HEAVY = 'Run nothing heavy, since it skews the runner.'
+
 function status(m: Module, now: Date) {
   const s = m.status
   // A module whose turn it is knows the commit it starts from, which is where the agent's branch should be
@@ -21,20 +25,25 @@ function status(m: Module, now: Date) {
   if (s.state === 'pending') {
     if (s.waitingFor === 'turn') return 'Not started.'
     // Frozen verifiers it still waits for are ones its baseline failed on
-    if (s.waitingFor === 'verifiers' && m.verifiers.kind === 'frozen') return `Its baseline failed on its verifiers, so it waits for an approved change request.${from}`
-    return `Waiting for its ${s.waitingFor}.${from}`
+    if (s.waitingFor === 'verifiers' && m.verifiers.kind === 'frozen') return `Its baseline failed on its verifiers, so it waits for an approved change request.${from} ${WHILE_VERIFIERS}`
+    if (s.waitingFor === 'verifiers') return `Waiting for its verifiers.${from} ${WHILE_VERIFIERS}`
+    return `Waiting for its baseline.${from} Meanwhile, read the module and plan its first attempt. ${NOTHING_HEAVY}`
   }
-  if (s.state === 'stuck') return 'Stuck, waiting for an abandon reason.'
+  if (s.state === 'stuck') return 'Stuck. Abandon it with a reason now, then move on.'
   if (m.clock.kind === 'grace') return 'Time is up, 1 attempt left.'
   const left = minutesLeft(m.clock, now)
-  return left === null ? '' : `${left} min left.`
+  const job = m.attempts.find((a) => a.job === 'queued' || a.job === 'running')
+  const busy = job ? `${job.id} is with the runner. Meanwhile, plan the next attempt. ${NOTHING_HEAVY}` : ''
+  return [left === null ? '' : `${left} min left.`, busy].filter(Boolean).join(' ')
 }
 
 const ended = (m: Module) => m.status.state === 'passed' || m.status.state === 'abandoned'
 
-/** While every other module has ended, the agent hears it in time to add the next one. */
-function last(p: Project, m: Module) {
-  return p.modules.every((x) => x === m || ended(x)) ? 'Last module in the project.' : ''
+/** While every other module has ended, the agent hears it in time to plan the next one. */
+function last(p: Project, m: Module, now: Date) {
+  if (!p.modules.every((x) => x === m || ended(x))) return ''
+  const spent = p.goal?.budgetEndsAt && minutesBetween(now, p.goal.budgetEndsAt) <= 0
+  return spent ? 'Last module in the project.' : 'Last module in the project. Plan the next one before this one ends.'
 }
 
 /** The goal as a target: `25 s or lower`, or `40% lower than the start`. */
@@ -117,6 +126,6 @@ export function boardLine(agent: Agent, now: Date): string {
   if (!m) return summary(agent.id, p)
   const done = m.steps.filter((s) => s.done).length
   const streak = m.streak >= 2 ? `${m.streak} wins in a row.` : ''
-  const blurb = [agent.blurb, goal(m), streak, projectGoal(p, now), last(p, m), status(m, now)].filter(Boolean).join(' ')
+  const blurb = [agent.blurb, goal(m), streak, projectGoal(p, now), last(p, m, now), status(m, now)].filter(Boolean).join(' ')
   return `${head}, Module (${m.position} / ${p.modules.length}): ${m.title}, Progress: ${done} / ${m.steps.length}, Blurb: ${blurb}`
 }

@@ -383,6 +383,11 @@ function apply(p: ProjectRec, m: ModuleRec, j: JobRec, at: Ms, fresh: boolean) {
 
 // Agent calls
 
+const JOB_NAME = { baseline: 'a baseline job', attempt: 'an attempt', stepCheck: 'a step check', final: 'a project measurement' } satisfies Record<JobKind, string>
+
+/** A stuck module only waits for the agent, so a refusal says what to do. */
+const stuckNext = (m: ModuleRec) => (m.state === 'stuck' ? ' Abandon it with a reason now, then move on.' : '')
+
 function find(w: World, agent: string, module: string): Result<Located> {
   const found = locate(w, agent, module)
   if (found) return ok(found)
@@ -517,9 +522,9 @@ export function postAttempt(
   const commit = args.commit.toLowerCase() as Commit
   const posted = m.attempts.find((x) => x.id === args.attempt)
   if (posted) return posted.commit === commit ? ok({ attempt: posted.id, job: posted.job }) : conflict('attemptIdTaken', `Attempt ${posted.id} was posted with commit ${posted.commit}.`)
-  if (!takes('attempt', m.state)) return conflict('wrongState', `${m.id} is ${m.state}, so it takes no attempts.`)
+  if (!takes('attempt', m.state)) return conflict('wrongState', `${m.id} is ${m.state}, so it takes no attempts.${stuckNext(m)}`)
   const f = factsOf(p, m, at)
-  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has a ${f.inFlight.kind} job in flight. Wait for it to finish.`)
+  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has ${JOB_NAME[f.inFlight.kind]} in flight. Plan the next attempt meanwhile, and post it once the job is done.`)
   if (f.deadline !== null && at >= f.deadline && f.last) return conflict('timeIsUp', `Time is up for ${m.id}, and its last attempt was ${f.last.id}.`)
   if (commit === f.best) return conflict('alreadyBest', `${commit} is already ${m.id}'s best commit.`)
 
@@ -542,10 +547,10 @@ export function stepDone(w: World, at: Ms, args: { agent: string; module: string
   if (!Number.isInteger(n) || n < 1 || n > m.steps.length) return invalid('badSpec', `${m.id} has steps 1 to ${m.steps.length}.`)
   if (m.steps[n - 1]!.doneAt !== null) return ok({ job: null, done: true })
   if (!takes('stepCheck', m.state))
-    return conflict('wrongState', m.state === 'passed' ? `${m.id} has passed, so its remaining steps are skipped and it takes no step checks.` : `${m.id} is ${m.state}, so it takes no step checks.`)
+    return conflict('wrongState', m.state === 'passed' ? `${m.id} has passed, so its remaining steps are skipped and it takes no step checks.` : `${m.id} is ${m.state}, so it takes no step checks.${stuckNext(m)}`)
   const f = factsOf(p, m, at)
   if (f.inFlight?.kind === 'stepCheck' && f.inFlight.step === n) return ok({ job: f.inFlight.id, done: false })
-  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has a ${f.inFlight.kind} job in flight. Wait for it to finish.`)
+  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has ${JOB_NAME[f.inFlight.kind]} in flight. Plan the next attempt meanwhile, and mark the step done once the job is done.`)
   if (n !== f.step + 1) return conflict('wrongStep', `Step ${f.step + 1} is ${m.id}'s current step.`)
   if (f.deadline !== null && at >= f.deadline) return conflict('timeIsUp', `Time is up for ${m.id}, so it takes no step checks.`)
 

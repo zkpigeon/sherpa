@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { Agent, AgentId, Clock, Commit, Iso, Module, ModuleId } from './api.ts'
+import type { Agent, AgentId, AttemptId, Clock, Commit, Iso, Module, ModuleId } from './api.ts'
 import { boardLine } from './boardLine.ts'
 
 const now = new Date('2026-11-03T02:22:00Z')
@@ -56,11 +56,11 @@ test('matches the format in DESIGN.md', () => {
   assert.doesNotMatch(boardLine(agentWith(moduleWith({ best: 371 })), now), /Best so far/)
 })
 
-test('warns while the current module is the last one, so the agent can add another before it ends', () => {
+test('warns while the current module is the last one, so the agent plans the next before it ends', () => {
   const m = moduleWith({})
   const a = agentWith(m)
   a.project!.modules = a.project!.modules.map((x) => (x.id === m.id ? x : { ...x, status: { state: 'passed' } }))
-  assert.match(boardLine(a, now), /2 wins in a row\. Last module in the project\. 38 min left\.$/)
+  assert.match(boardLine(a, now), /2 wins in a row\. Last module in the project\. Plan the next one before this one ends\. 38 min left\.$/)
 })
 
 test('an ended project sums up what it did and where to start the next one', () => {
@@ -104,15 +104,19 @@ test('says when time is up and one attempt is left', () => {
   assert.match(boardLine(agentWith(moduleWith({ clock })), now), /Time is up, 1 attempt left\.$/)
 })
 
-test('names what a stuck or pending module is waiting for', () => {
-  assert.match(boardLine(agentWith(moduleWith({ status: { state: 'stuck', cause: 'step' }, clock: { kind: 'stopped', startedAt: null, at: iso('2026-11-03T02:00:00Z'), maxMinutes: 90, extensions: [], waits: [], waitedMinutes: 0 } })), now), /Stuck, waiting for an abandon reason\.$/)
-  assert.match(boardLine(agentWith(moduleWith({ status: { state: 'pending', waitingFor: 'verifiers' }, clock: { kind: 'notStarted' } })), now), /Waiting for its verifiers\.$/)
+test('every wait names what to do meanwhile', () => {
+  const notStarted: Clock = { kind: 'notStarted' }
+  assert.match(boardLine(agentWith(moduleWith({ status: { state: 'stuck', cause: 'step' }, clock: { kind: 'stopped', startedAt: null, at: iso('2026-11-03T02:00:00Z'), maxMinutes: 90, extensions: [], waits: [], waitedMinutes: 0 } })), now), /Stuck\. Abandon it with a reason now, then move on\.$/)
+  assert.match(boardLine(agentWith(moduleWith({ status: { state: 'pending', waitingFor: 'verifiers' }, clock: notStarted })), now), /Waiting for its verifiers\. Meanwhile, plan the next module, or work ahead on this one's first step\.$/)
+  assert.match(boardLine(agentWith(moduleWith({ status: { state: 'pending', waitingFor: 'baseline' }, clock: notStarted })), now), /Waiting for its baseline\. Meanwhile, read the module and plan its first attempt\. Run nothing heavy, since it skews the runner\.$/)
   const frozen = { kind: 'frozen' as const, hash: 'abc', tests: 1, author: 'verifier', hardware: 'cpu', openChanges: 0 }
   assert.match(
-    boardLine(agentWith(moduleWith({ status: { state: 'pending', waitingFor: 'verifiers' }, verifiers: frozen, clock: { kind: 'notStarted' } })), now),
-    /Its baseline failed on its verifiers, so it waits for an approved change request\.$/,
+    boardLine(agentWith(moduleWith({ status: { state: 'pending', waitingFor: 'verifiers' }, verifiers: frozen, clock: notStarted })), now),
+    /Its baseline failed on its verifiers, so it waits for an approved change request\. Meanwhile, plan the next module/,
     'frozen verifiers it still waits for are ones its baseline failed on',
   )
+  const verifying = { id: 'a12' as AttemptId, step: 4, commit: 'c0ffee' as Commit, note: '', job: 'running' as const, verdict: null, median: null, postedAt: iso('2026-11-03T02:20:00Z'), judgedAt: null }
+  assert.match(boardLine(agentWith(moduleWith({ attempts: [verifying] })), now), /38 min left\. a12 is with the runner\. Meanwhile, plan the next attempt\. Run nothing heavy, since it skews the runner\.$/)
 })
 
 test('an agent with no open project says so', () => {
