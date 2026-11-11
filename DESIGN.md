@@ -55,7 +55,7 @@ agent 1: Project: search-perf, Module (2 / 5): query cache, Progress: 3 / 7, Blu
 | Verifiers | frozen files, verifier hash, container image, test commands for each step and for regressions, benchmark command (prints one JSON line per run), hardware label, job time limit, author |
 | Change request | `id`, module, author, reason, proposed files, state (`open`, `approved`, or `rejected`) |
 | Attempt | `attemptId` (chosen by the agent), module, step, `commit`, `note`, job, `verdict` (`win`, `flat`, or `fail`), posted and judged times |
-| Job | `id` (from its kind, commits, step, and verifier hash), module, kind (`baseline`, `attempt`, `step check`, or `final`), state, verifier hash, hardware label, holding runner, lease expiry, queued, claimed, and finished times for each claim, each benchmark run's commit, value, and work count, test results and test count, verifier files the commit touched |
+| Job | `id` (from its kind, commits, step, and verifier hash), module, kind (`baseline`, `attempt`, `step check`, or `final`), state, verifier hash, hardware label, holding runner, lease expiry, queued, claimed, and finished times for each claim, each benchmark run's commit, value, and work count, test results and test count, verifier files the commit touched, frozen files a command changed, the sandbox it ran in |
 
 The server derives the baseline, the best value, the streak, the extensions, and the deadline from the attempts and jobs instead of storing them, so they can't drift out of step. It stores each module's state, and on every request it applies any transition that has come due.
 
@@ -115,23 +115,70 @@ Every module needs verifiers before it can start: tests that prove each step wor
 
 The agent never reports a number. For each attempt it commits its change on top of the head commit, pushes the commit where the runner can fetch it, and posts the attempt's ID, commit, and a note. Each module has at most one job in flight, and the server refuses a new attempt or step check while one is queued or running.
 
-- **Frozen copies.** The runner fetches the best commit and the new commit and copies the frozen verifier files over each checkout. Edits the agent made to tests or the benchmark have no effect.
+- **Frozen copies.** The runner fetches the best commit and the new commit and copies the frozen verifier files over each checkout. Edits the agent made to tests or the benchmark have no effect, and a command that changes a frozen file while the job runs gets the job thrown out.
 - **Attempts.** On the new commit, the runner runs the regression tests and the tests of every step that is done. Then it runs the benchmark 5 times on each commit, alternating. A module's verifiers can ask for more runs, up to 25, when its benchmark is noisy, since 5 runs a side can only confirm a gain when the two sets barely overlap. It sends each run's commit, value, and work count, the test results and test count, and which verifier files the commit touched.
 - **Step checks.** Marking the current step done queues a step check, which is allowed while the module is active or past target. The runner runs that step's tests and the regression tests on the head commit, and the step is done only when they pass. It also runs the benchmark 5 times on the head commit and the best commit, alternating, so the server can tell whether the finished step held the metric.
 - **Any workload.** The runner knows nothing about the workload. A benchmark is any command that prints each run's value and work count as one JSON line, such as `{"value": 331, "work": 12000}`. Values must be positive, because gains are percentages of them. A test command passes when it exits 0, and it can report counts as a last line such as `{"passed": 40, "total": 42}`; without one it counts as one test. A hardware label such as `gpu` sends a job to a runner that has that hardware, and the runner passes it into the job container.
 - **Fetching commits.** The runner fetches commits from the project's git remote, or its own default. Commits are named by their full hash, so one commit can't pass as two. A commit it can't fetch fails the job the same way failing tests do, and so does a benchmark that crashes on the commit under test. The frozen files are written without following any symlink the commit contains, so a link can't carry them out of the checkout.
 - **Baselines.** Before a module becomes active, a baseline job runs the regression tests and the benchmark 5 times on the module's start commit. The median is the baseline, and the target is the baseline improved by `targetGain`. If the baseline job fails or is killed, the module stays pending until its verifiers change or the agent abandons it, and the dashboard flags it.
 - **Tokens.** Agents, runners, and you hold different tokens. Only a runner token can send results, and only the admin token can approve changes or replace verifiers.
-- **Bare containers.** A job container gets its checkout and nothing else: no tokens, no Docker socket, and no network. Each commit has its own container, and every process a command leaves running is killed before the next command, so nothing slows the other commit's benchmark.
+- **Sandboxes.** In the strict sandbox, a job container gets its checkout and nothing else: no tokens, no Docker socket, and no network. Each commit has its own container, and every process a command leaves running is killed before the next command, so nothing slows the other commit's benchmark. The open sandbox trades that isolation for the machine's network and toolchain. The sections below explain the two and the rule they share.
 - **Leases and time limits.** The runner holding a job renews its lease while the job runs. If the lease lapses, the runner is presumed gone and the job returns to the queue for any runner to claim. A job that runs past its time limit is killed, and the time limit covers fetching the commits. A runner that holds a job 30 minutes past its time limit loses it, as if it had given up.
 - **Repeat runs.** A job is identified by its kind, its commits, its step, and the verifier hash, so running it twice returns the same stored result. Reposting a commit as a new attempt gets the stored verdict instead of another roll of the dice. A job the runner couldn't run at all, such as when Docker is down, goes back in the queue. After three such tries it fails without a verdict, which doesn't count as a failed turn.
+
+## The benchmark is the one thing the agent can never change
+
+A hill climb is only as honest as its measurement. An agent that can edit the benchmark can win without making anything faster, and a night of wins means nothing. So one rule holds in every setup: the code under test never changes the tests or the benchmark that judge it. Everything else about isolation is a trade you choose.
+
+Two guards enforce the rule, and they run in both sandboxes.
+
+- **Frozen copies.** The runner copies the frozen files over each checkout, read-only, after the agent's commit is in place. An edit the agent committed to a test or the benchmark is replaced before anything runs, and the dashboard flags the commit.
+- **A check after every command.** After each test or benchmark command, the runner checks every frozen file on every checkout of the job. A file that changed, even one written back with the same bytes, throws the whole job out. An attempt thrown out this way is a fail and a failed turn, and the dashboard flags it as a frozen file changed while the job ran.
+
+## Two sandboxes: strict and open
+
+`SHERPA_SANDBOX` picks how much else the runner isolates. It is a setting of the runner, not of a project, so one server can have a strict runner and an open one.
+
+**Strict**, the default, runs each commit in its own bare container: the checkout copied in, no network, no tokens, no Docker socket, and every process a command leaves running killed before the next command. The code under test reaches nothing but its own checkout. The other commit's checkout lives in another container, so it can't touch that either.
+
+**Open** runs each command as a plain process on the runner's machine, in the checkout, with the machine's network, toolchain, and GPUs. It passes on no secrets: a command sees `HOME`, `PATH`, `LANG`, and a few locale and certificate settings, and nothing else from the runner's environment. Each command runs in its own process group, and the group is killed when the command ends. Nothing else is isolated.
+
+### Why strict is the default
+
+Strict isn't there because agents are malicious. It is there because a measurement you can't trust is worse than no measurement, and the cheap way to trust one is to put the judging out of the code's reach rather than detect tampering.
+
+- **The agent runs unattended for hours.** Nobody reads each commit before the runner executes it. A strict runner keeps each commit's code in its own container, away from the network, the runner's token, and the other commit.
+- **Detection has gaps that isolation doesn't.** The check after each command sees a changed file. It can't see a process that reads the other commit's checkout, or a call out to the network that fetches a better answer. In strict mode neither is possible.
+- **Results stay comparable.** No network means no remote cache, no service that answers faster on the second run, and no download that times differently from one job to the next.
+- **The runner's machine is safe.** Code from the commit can't read files outside its checkout, reach other services, or use the Docker socket.
+
+Strict has a limit too. Inside its container, code under test runs as the image's user, root in most images, so a commit built to attack Sherpa could change the tools there, the file check included. Like any attack on Sherpa itself, that is rare, and v1 doesn't prevent it.
+
+### When open is the better trade
+
+Open is for setups where the strict sandbox costs more than it protects.
+
+- **No Docker.** The machine can't run Docker, or Docker can't reach the hardware, such as a Mac whose GPU containers can't use.
+- **The benchmark needs the machine.** It needs a toolchain too large to bake into an image, a license server, a local service, or the network itself.
+- **Container overhead skews the metric.** Startup, filesystem layers, or virtualization show up in the numbers being climbed.
+- **You trust the code.** You wrote the agent's instructions, you run it on your own repo, and you read the dashboard's flags.
+
+### What open gives up
+
+- **Network.** Code under test can reach the network. A benchmark that depends on remote state can drift between runs, and code could fetch data it shouldn't use.
+- **The machine.** Code under test runs as the runner's user. It can read any file that user can, and it can change files outside the checkout, including the other commit's checkout. The check after each command catches a change to a frozen file. It doesn't catch a read, or a change to anything else.
+- **The runner's token.** The runner's user can read the runner token, in `.env` and in the runner's own environment, so code under test could send results of its own. Open trusts the code not to.
+- **Leftovers.** A process that leaves its process group on purpose, such as with `setsid`, can outlive its command and slow the next run.
+- **Benchmark stability.** Other work on the machine shares the CPU with the benchmark. `SHERPA_CPUSET` and `SHERPA_MEMORY` apply only to strict containers.
+
+The Compose runner holds the Docker socket, and an open job would inherit it. So a Compose runner set to open runs no jobs. Run `sh scripts/open-runner.sh` on the host instead.
 
 ## The server judges every attempt
 
 The server sets each attempt's verdict from the runner's results.
 
 - A win passes the tests, its median beats the best commit's median by at least `minGain`, and a rank test (Mann-Whitney) separates the two sets of runs at p below 0.05.
-- A fail has failing tests, a job killed for running past its time limit, a commit the runner can't fetch or benchmark, or runs that the rank test shows are worse than the best commit's at p below 0.05.
+- A fail has failing tests, a job killed for running past its time limit, a job thrown out because a command changed a frozen file, a commit the runner can't fetch or benchmark, or runs that the rank test shows are worse than the best commit's at p below 0.05.
 - Any other attempt is flat.
 - A win moves both the head commit and the best commit to the new commit. A flat attempt moves only the head commit, so work that prepares later steps is kept. A fail moves neither, and the agent goes back to the head commit.
 - An attempt meets the target when it is a win and its median reaches the target.
@@ -175,6 +222,7 @@ The server checks every goal when it is set.
 The defenses above block the cheats that look like normal work, such as editing a test, loosening the benchmark, keeping the best run, or marking a step done without doing it. An agent that leaves its task to attack Sherpa itself is rare, so v1 detects that instead of preventing it. The dashboard flags:
 
 - a commit that touches a verifier file, as the runner reports it,
+- a job a command threw out by changing a frozen file while it ran,
 - fewer tests running than in the module's previous job,
 - a benchmark run whose work count is below the best commit's,
 - a verdict with no runner job behind it,
@@ -232,6 +280,7 @@ A Claude Code or Codex hook calls `GET /agents/{id}` and adds the board line to 
 ## Not in v1
 
 - Separate OS users or containers for agents, and hardened container runtimes such as gVisor. The dashboard's flags cover the rare agent that leaves its task.
+- An open sandbox that confines reads, such as a separate OS user per job. Open mode catches a changed frozen file, not a read.
 - A held-out benchmark that only the runner holds, and a reviewer agent that reads each module's diff before it passes.
 - A separate token for each agent.
 

@@ -79,7 +79,7 @@ curl -sS -X PUT "$W/agents/$ID/blurb" -H "$AUTH" -H 'content-type: text/plain' -
 
 ## Submit every attempt as a commit
 
-You never report a number. For each attempt, commit your change on top of the module's head commit and push it to the remote `sherpa`, under a ref named after the commit. That keeps it fetchable after you reset your branch, and it never needs `--force`:
+You never report a number, and you can't change the tests or the benchmark. The runner copies the frozen files over every checkout, and a command that changes one while it runs gets the whole job thrown out as a fail. For each attempt, commit your change on top of the module's head commit and push it to the remote `sherpa`, under a ref named after the commit. That keeps it fetchable after you reset your branch, and it never needs `--force`:
 
 ```sh
 git push -q sherpa "HEAD:refs/sherpa/$(git rev-parse HEAD)"
@@ -169,7 +169,7 @@ The verifier agent writes a module's tests and benchmark before the module start
 
 - **Tests**: one command for the regression tests, and one for each step. A command passes when it exits 0. To report counts, print a last line such as `{"passed": 40, "total": 42}`.
 - **Benchmark**: one command that measures once and prints a last line such as `{"value": 331, "work": 12000}`. The value must be positive. `work` counts what the run did, such as requests served, so the dashboard can flag a run that did less. The runner runs it 5 times on each commit, alternating. If the benchmark is noisy, set `"runs"`, up to 25, in the verifiers.
-- **Container**: an image with everything the commands need. Jobs run with no network.
+- **Container**: an image with everything the commands need. In the strict sandbox, the default, jobs run in it with no network. A runner in the open sandbox ignores the image and runs the commands on its own machine, so write commands that work in both. The image needs `sha256sum`, which the runner uses to check the frozen files after every command.
 
 Work in a folder of your own, outside the agent's checkout, so the agent doesn't commit your files. To find the modules that need verifiers, list the project. Each module's `verifiers` is `missing`, `frozen`, or `failed` when the baseline job failed on them:
 

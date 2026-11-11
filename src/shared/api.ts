@@ -87,7 +87,11 @@ export type Verifiers =
   /** `tests` is the test count of the module's latest job, null until one has run. */
   | { kind: 'frozen'; hash: string; tests: number | null; author: string; hardware: string; openChanges: number }
 
-export type FlagKind = 'touchedVerifier' | 'fewerTests' | 'lessWork' | 'verdictWithoutJob' | 'selfAuthoredVerifiers' | 'baselineFailed'
+export type FlagKind = 'touchedVerifier' | 'rewroteVerifier' | 'fewerTests' | 'lessWork' | 'verdictWithoutJob' | 'selfAuthoredVerifiers' | 'baselineFailed'
+
+/** How much a runner isolates the code it measures. README.md and DESIGN.md explain the two. */
+export const SANDBOXES = ['strict', 'open'] as const
+export type Sandbox = (typeof SANDBOXES)[number]
 
 export interface Flag {
   kind: FlagKind
@@ -236,4 +240,6 @@ export interface AttemptDetail {
   /** One-sided Mann-Whitney p-value. */
   p: number | null
   touchedVerifiers: string[]
+  /** The sandbox the job ran in, once a runner has sent its results. */
+  sandbox: Sandbox | null
 }

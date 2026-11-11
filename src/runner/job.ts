@@ -1,8 +1,10 @@
 // One job, start to finish: check out each commit, note which verifier files
 // the commit under test changed, copy the frozen files over every checkout,
 // run the tests, then the benchmark alternating between commits, and send
-// what happened. The lease is renewed throughout; if the server says the job
-// was cancelled or taken away, the job stops and sends nothing.
+// what happened. After every command it checks the frozen files on every
+// checkout, and a command that changed one throws the whole job out. The
+// lease is renewed throughout; if the server says the job was cancelled or
+// taken away, the job stops and sends nothing.
 import { lstatSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import type { Run } from '../shared/api.ts'
@@ -79,6 +81,13 @@ export function benchRun(r: Exit): { value: number; work: number } | null {
 class Killed extends Error {}
 class Lost extends Error {}
 class BadCommit extends Error {}
+class Tampered extends Error {
+  paths: string[]
+  constructor(paths: string[]) {
+    super(`A command changed the frozen ${paths.join(', ')}.`)
+    this.paths = paths
+  }
+}
 /** The server answered 4xx. */
 export class Refused extends Error {}
 
@@ -102,7 +111,8 @@ export function overlay(root: string, path: string, content: string) {
   }
   const real = realpathSync(join(at, '..'))
   if (real !== realpathSync(root) && !real.startsWith(realpathSync(root) + sep)) throw new Error(`Refusing to write ${path} outside the checkout.`)
-  writeFileSync(at, content, { flag: 'wx' })
+  // Read-only stops an honest mistake. The check after every command catches the rest
+  writeFileSync(at, content, { flag: 'wx', mode: 0o444 })
 }
 
 export async function runJob(t: Claimed, d: JobDeps, stop?: AbortSignal): Promise<void> {
@@ -128,10 +138,14 @@ export async function runJob(t: Claimed, d: JobDeps, stop?: AbortSignal): Promis
     if (left <= 0) throw new Killed()
     const r = await box.exec(command, left, lost.signal)
     if (r.aborted) throw new Lost()
+    // Every checkout, since in the open sandbox a command can reach the other commit's files too
+    const tampered = [...new Set((await Promise.all(boxes.map((b) => b.tampered()))).flat())].sort()
+    if (tampered.length) throw new Tampered(tampered)
     if (r.timedOut) throw new Killed()
     return r
   }
 
+  const sandbox = d.executor.sandbox
   let results: JobResults | null
   try {
     const repo = t.repo ?? d.defaultRepo
@@ -159,7 +173,7 @@ export async function runJob(t: Claimed, d: JobDeps, stop?: AbortSignal): Promis
     const box = new Map<string, Box>()
     for (const c of commits) {
       if (lost.signal.aborted) throw new Lost()
-      const b = await d.executor.open(dirs.get(c)!, t)
+      const b = await d.executor.open(dirs.get(c)!, { ...t, frozen: t.files })
       boxes.push(b)
       box.set(c, b)
     }
@@ -187,14 +201,17 @@ export async function runJob(t: Claimed, d: JobDeps, stop?: AbortSignal): Promis
           runs.push({ commit: c as Run['commit'], value: r.value, work: r.work })
         }
     }
-    results = { outcome: 'done', tests, runs, touched }
+    results = { outcome: 'done', tests, runs, touched, sandbox }
   } catch (e) {
     if (e instanceof Lost) {
       d.log(`${t.job} was cancelled, taken away, or stopped`)
       results = null
-    } else if (e instanceof Killed) results = { outcome: 'killed', tests: null, runs: [], touched: [] }
-    else if (e instanceof BadCommit) results = { outcome: 'badCommit', tests: null, runs: [], touched: [], error: e.message.slice(0, 500) }
-    else {
+    } else if (e instanceof Killed) results = { outcome: 'killed', tests: null, runs: [], touched: [], sandbox }
+    else if (e instanceof BadCommit) results = { outcome: 'badCommit', tests: null, runs: [], touched: [], sandbox, error: e.message.slice(0, 500) }
+    else if (e instanceof Tampered) {
+      d.log(`${t.job} threw out: ${e.message}`)
+      results = { outcome: 'tampered', tests: null, runs: [], touched: [], tampered: e.paths, sandbox, error: e.message.slice(0, 500) }
+    } else {
       const message = (e as Error).message
       d.log(`${t.job} couldn't run: ${message}`)
       results = { outcome: 'error', tests: null, runs: [], touched: [], error: message.slice(0, 500) }

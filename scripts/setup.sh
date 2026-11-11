@@ -57,3 +57,12 @@ Next, connect the checkout an agent will work in, giving the agent an ID:
 
   sh scripts/connect.sh ~/code/my-project 1
 EOF
+if [ "$(value SHERPA_SANDBOX)" = open ]; then
+  cat <<EOF
+
+SHERPA_SANDBOX is open, so the Compose runner runs no jobs. Start the open
+runner on this machine, and keep it running:
+
+  sh scripts/open-runner.sh
+EOF
+fi

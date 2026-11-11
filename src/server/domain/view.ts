@@ -174,6 +174,7 @@ export function attemptDetailOf(w: World, agent: AgentId, module: ModuleId, atte
     gain: x.judged?.gain ?? null,
     p: x.judged?.p ?? null,
     touchedVerifiers: j.results?.touched ?? [],
+    sandbox: j.results?.sandbox ?? null,
   }
 }
 
@@ -219,6 +220,7 @@ function why(m: ModuleRec, x: AttemptRec, j: JobRec): string {
   }
   const d = x.judged
   if (r.outcome === 'killed') return 'Fail: the job ran past its time limit.'
+  if (r.outcome === 'tampered') return `Fail: a command changed the frozen ${(r.tampered ?? []).join(', ') || 'verifier files'}, so the runner threw the job out. Leave the verifier files alone.`
   if (r.outcome === 'badCommit') return `Fail: the runner couldn't fetch the commit${r.error ? `: ${r.error}` : ''}`.replace(/\.?$/, '.')
   if (r.tests && r.tests.passed < r.tests.total) return `Fail: ${r.tests.total - r.tests.passed} of ${r.tests.total} tests failed.`
   if (d.gain === null || d.p === null) return 'Fail: the benchmark measured nothing on this commit.'
@@ -295,6 +297,7 @@ export function stepStatusOf(w: World, agent: string, module: string, n: number)
     const r = job.results
     if (!r) return `No result: no runner could run the check. Mark the step done again to retry.`
     if (r.outcome === 'killed') return 'The check ran past its time limit, so the step stays open.'
+    if (r.outcome === 'tampered') return 'A command changed a frozen verifier file, so the runner threw the check out and the step stays open.'
     if (r.outcome === 'badCommit') return "The runner couldn't fetch the head commit, so the step stays open."
     if (r.tests && r.tests.passed < r.tests.total) return `${r.tests.total - r.tests.passed} of ${r.tests.total} tests failed, so the step stays open.`
     if (step.held === false) return 'The tests passed and the step is done, but the metric got worse, so it earned no extension.'

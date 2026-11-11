@@ -10,7 +10,7 @@ import type { Board } from '../shared/api.ts'
 import { createHandler } from '../server/http.ts'
 import { createService } from '../server/service.ts'
 import { openStore } from '../server/store.ts'
-import { dockerExecutor, localExecutor, type Executor } from './exec.ts'
+import { changedSums, dockerExecutor, openExecutor, type Executor } from './exec.ts'
 import { createGit } from './git.ts'
 import { benchRun, createApi, lastJson, runJob, testCount, type JobDeps } from './job.ts'
 
@@ -28,6 +28,8 @@ test('test and benchmark output parse the way DESIGN.md describes', () => {
   assert.deepEqual(benchRun(exit(0, 'warming up\n{"value": 331, "work": 12000}')), { value: 331, work: 12000 })
   assert.equal(benchRun(exit(1, '{"value": 331, "work": 12000}')), null)
   assert.equal(benchRun(exit(0, 'no json')), null)
+  const sum = 'a'.repeat(64)
+  assert.deepEqual(changedSums(`${sum}  bench.sh\n${'b'.repeat(64)}  test.sh`, { 'bench.sh': sum, 'test.sh': sum, 'gone.sh': sum }), ['test.sh', 'gone.sh'], 'a changed or missing frozen file is reported')
 })
 
 /** A repo with a start commit and three attempts, one of which edits the benchmark. */
@@ -148,7 +150,7 @@ async function scenario(name: string, executor: Executor, image: string) {
   }
 }
 
-test('a runner measures attempts from a real repo with the frozen verifiers (local executor)', () => scenario('local', localExecutor, 'unused'))
+test('a runner measures attempts from a real repo with the frozen verifiers (open sandbox)', () => scenario('local', openExecutor(), 'unused'))
 
 const hasBusybox = spawnSync('docker', ['image', 'inspect', 'busybox:1.37'], { stdio: 'ignore' }).status === 0
 test('the same in bare Docker containers', { skip: !hasBusybox && 'needs Docker and the busybox:1.37 image', timeout: 120_000 }, () =>
@@ -208,7 +210,7 @@ test('symlinks in a commit can’t carry the frozen files out of the checkout', 
   const attack = git('rev-parse', 'HEAD')
 
   const files = { 'bench.sh': `echo "{\\"value\\": $(cat value.txt), \\"work\\": 1}"`, 'conf/settings': 'frozen' }
-  const r = await rig('links', localExecutor, 'unused', files, 'sh bench.sh', 'true')
+  const r = await rig('links', openExecutor(), 'unused', files, 'sh bench.sh', 'true')
   try {
     await r.start(`file://${dir}`, start)
     await r.next()
@@ -241,7 +243,7 @@ test('a runner that is told to stop drops its job instead of finishing it', asyn
   const r = repo('stopping')
   // A benchmark slow enough to stop in the middle of
   const files = { 'bench.sh': `sleep 0.3; echo "{\\"value\\": $(cat value.txt), \\"work\\": 1}"` }
-  const rr = await rig('stopping', localExecutor, 'unused', files, 'sh bench.sh', 'true')
+  const rr = await rig('stopping', openExecutor(), 'unused', files, 'sh bench.sh', 'true')
   try {
     await rr.start(r.url, r.start)
     // The stop lands between commands, before this job's first one: it must drop the job, not finish it
@@ -252,4 +254,52 @@ test('a runner that is told to stop drops its job instead of finishing it', asyn
   } finally {
     await rr.stop()
   }
+})
+
+test('in the open sandbox, a command that rewrites the frozen benchmark gets the whole job thrown out', async () => {
+  const dir = join(root, 'rewrite')
+  mkdirSync(dir)
+  const git = (...args: string[]) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim()
+  git('init', '--quiet', '--initial-branch=main')
+  git('config', 'user.email', 'agent@example.com')
+  git('config', 'user.name', 'agent')
+  writeFileSync(join(dir, 'value.txt'), '100')
+  writeFileSync(join(dir, 'setup.sh'), 'true')
+  git('add', '-A')
+  git('commit', '--quiet', '-m', 'start')
+  const start = git('rev-parse', 'HEAD')
+  // The attack: the regression test runs code from the commit, which makes the frozen benchmark writable again and rewrites it on both checkouts
+  writeFileSync(join(dir, 'setup.sh'), `for f in ../*/bench.sh; do chmod u+w "$f"; echo 'echo "{\\"value\\": 1, \\"work\\": 1}"' > "$f"; done`)
+  git('add', '-A')
+  git('commit', '--quiet', '-m', 'rewrite')
+  const attack = git('rev-parse', 'HEAD')
+
+  const files = { 'bench.sh': `echo "{\\"value\\": $(cat value.txt), \\"work\\": 1}"` }
+  const r = await rig('rewrite', openExecutor(), 'unused', files, 'sh bench.sh', 'sh setup.sh')
+  try {
+    await r.start(`file://${dir}`, start)
+    await r.next()
+    await r.call('POST', '/agents/1/modules/m1/attempts', { attemptId: 'a1', commit: attack, note: 'Speed up setup.' })
+    await r.next()
+    const status = await r.call('GET', '/agents/1/modules/m1/attempts/a1')
+    assert.equal(status.verdict, 'fail', 'a rewritten benchmark never measures')
+    assert.match(status.why, /changed the frozen bench\.sh/)
+    const m = await r.module()
+    assert.deepEqual(m.flags.map((f) => [f.kind, f.attempt]), [['rewroteVerifier', 'a1']])
+    assert.equal((await r.call('GET', '/api/agents/1/modules/m1/attempts/a1', undefined, TOKENS.admin)).sandbox, 'open')
+  } finally {
+    await r.stop()
+  }
+})
+
+test('in the open sandbox, a process a command leaves running is killed with it', async () => {
+  const marker = join(root, 'leftover-alive')
+  const box = await openExecutor().open(root, { image: 'unused', hardware: 'cpu', job: 'j0', frozen: {} })
+  // A background loop that would keep touching the marker for a minute
+  const r = await box.exec(`(for i in $(seq 600); do touch '${marker}'; sleep 0.1; done) >/dev/null 2>&1 & echo started`, 10_000)
+  assert.equal(r.stdout.trim(), 'started')
+  await new Promise((done) => setTimeout(done, 300))
+  rmSync(marker, { force: true })
+  await new Promise((done) => setTimeout(done, 500))
+  assert.equal(existsSync(marker), false, 'the loop died with its command')
 })
