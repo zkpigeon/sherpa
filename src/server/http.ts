@@ -504,7 +504,7 @@ const ROUTES: Route[] = [
     ['runner'],
     async (s, { params: [job], body }) => {
       const b = object(await body())
-      const results = { outcome: b.outcome, tests: b.tests ?? null, runs: b.runs, touched: b.touched ?? [], ...(b.tampered === undefined ? {} : { tampered: b.tampered }), ...(b.sandbox === undefined ? {} : { sandbox: b.sandbox }), ...(b.error ? { error: b.error } : {}) } as JobResults
+      const results = { outcome: b.outcome, tests: b.tests ?? null, runs: b.runs, touched: b.touched ?? [], ...(b.tampered === undefined ? {} : { tampered: b.tampered }), ...(b.sandbox === undefined ? {} : { sandbox: b.sandbox }), ...(b.clean == null ? {} : { clean: b.clean }), ...(b.error ? { error: b.error } : {}) } as JobResults
       const args = { job: job!, runner: b.runner as string, results }
       return reply(s.write('sendResults', args, (w, at, config) => cmd.sendResults(w, at, args, config)))
     },

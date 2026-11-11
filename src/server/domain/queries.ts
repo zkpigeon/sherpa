@@ -54,7 +54,7 @@ export function startCommits(p: ProjectRec): (Commit | null)[] {
   let from: Commit | null = p.startCommit
   for (const m of p.modules) {
     out.push(from)
-    // An ended module leaves its best commit: its latest win, or its own start without one
+    // An ended module leaves its best commit once it has a win, or its own start without one
     if (from === null || !ended(m.state)) from = null
     else from = keptOf(m) ?? from
   }

@@ -63,6 +63,7 @@ export const stateBadge = (state: ModuleStatus['state']) => STATE[state]
 
 export const VERDICT: Record<Verdict, { label: string; tone: Tone }> = {
   win: { label: 'Win', tone: 'success' },
+  simpler: { label: 'Simpler', tone: 'accent' },
   flat: { label: 'Flat', tone: 'neutral' },
   fail: { label: 'Fail', tone: 'danger' },
 }

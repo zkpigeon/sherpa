@@ -54,10 +54,12 @@ export type Streak = 'extends' | 'holds' | 'ends'
  * What each verdict does to its module, so queries and commands read an
  * effect instead of naming verdicts. Only a verdict that extends a streak
  * earns an extension, and only one that ends it passes a module past its
- * target.
+ * target. A simpler attempt keeps the module's code smaller at an equal
+ * metric, so it moves the best commit but buys no time and no progress.
  */
 export const VERDICTS = {
   win: { movesHead: true, movesBest: true, streak: 'extends', canMeetTarget: true, failedTurn: false },
+  simpler: { movesHead: true, movesBest: true, streak: 'holds', canMeetTarget: false, failedTurn: false },
   flat: { movesHead: true, movesBest: false, streak: 'ends', canMeetTarget: false, failedTurn: false },
   fail: { movesHead: false, movesBest: false, streak: 'ends', canMeetTarget: false, failedTurn: true },
 } as const satisfies Record<Verdict, { movesHead: boolean; movesBest: boolean; streak: Streak; canMeetTarget: boolean; failedTurn: boolean }>
@@ -188,6 +190,7 @@ export function verifierProblem(v: VerifierSpec | undefined, steps: number): str
   const c = v.commands
   if (!c || !isText(c.regression, 500) || !isText(c.benchmark, 500)) return 'The verifiers need a regression test command and a benchmark command.'
   if (!Array.isArray(c.steps) || c.steps.length !== steps || !c.steps.every((x) => isText(x, 500))) return `The verifiers need one test command for each of the module's ${steps} steps.`
+  if (c.clean !== undefined && !isText(c.clean, 500)) return 'The clean command must be one line of at most 500 characters.'
   if (!isText(v.hardware, 40)) return 'The verifiers need a hardware label, such as cpu.'
   if (!number(v.timeLimitMinutes) || v.timeLimitMinutes <= 0 || v.timeLimitMinutes > 240) return 'timeLimitMinutes must be between 0 and 240.'
   if (v.runs !== undefined && (!Number.isInteger(v.runs) || v.runs < 3 || v.runs > 25)) return 'runs must be a whole number from 3 to 25.'

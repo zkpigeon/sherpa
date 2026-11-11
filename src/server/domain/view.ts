@@ -1,8 +1,8 @@
 // What the server sends: the records turned into the Board and AttemptDetail
 // of src/shared/api.ts, the plain-text board lines, and the small answers to
 // an agent's GET calls. Read-only; settle the world first.
-import type { Agent, AgentId, Attempt, AttemptDetail, AttemptId, Board, ChangeId, Clock, Commit, Goal, Iso, JobId, Module, ModuleId, ModuleStatus, Project, Verdict } from '../../shared/api.ts'
-import { judge } from './judge.ts'
+import type { Agent, AgentId, Attempt, AttemptDetail, AttemptId, Board, ChangeId, CleanResults, Clock, Commit, Goal, Iso, JobId, Module, ModuleId, ModuleStatus, Project, Verdict } from '../../shared/api.ts'
+import { judge, smaller } from './judge.ts'
 import { boardLine } from '../../shared/boardLine.ts'
 import { budgetEndsAt, currentOf, factsOf, failedTurns, firstInLine, locate, measured, progressOf, reachedCommit, standingOf, verifiersOf, type Facts } from './queries.ts'
 import { ended } from './rules.ts'
@@ -173,6 +173,7 @@ export function attemptDetailOf(w: World, agent: AgentId, module: ModuleId, atte
     bestMedian: x.judged?.bestMedian ?? null,
     gain: x.judged?.gain ?? null,
     p: x.judged?.p ?? null,
+    clean: j.results?.clean ?? null,
     touchedVerifiers: j.results?.touched ?? [],
     sandbox: j.results?.sandbox ?? null,
   }
@@ -192,6 +193,8 @@ export interface AttemptStatus {
   gain: number | null
   p: number | null
   tests: { passed: number; total: number } | null
+  /** The clean rules on both commits, when the verifiers have a clean command and the tests passed. */
+  clean: CleanResults | null
   step: number
   failedTurns: number
   streak: number
@@ -206,6 +209,7 @@ const isLast = (p: ProjectRec, m: ModuleRec) => p.modules.every((x) => x === m |
 
 const pct = (n: number) => `${Math.abs(n) < 10 ? Math.abs(n).toFixed(1) : Math.round(Math.abs(n))}%`
 const pText = (p: number) => (p < 0.001 ? 'p < 0.001' : `p = ${p.toFixed(3)}`)
+const sizeText = (n: number | null) => (n === null ? 'no size' : n.toLocaleString('en-US'))
 
 /** Why a job's verdict came out as it did, in one sentence, so a flat result can be told from a noisy one. */
 function why(m: ModuleRec, x: AttemptRec, j: JobRec): string {
@@ -229,9 +233,13 @@ function why(m: ModuleRec, x: AttemptRec, j: JobRec): string {
   const moved = `${pct(d.gain)} ${way} than the best commit`
   if (d.verdict === 'win') return `Win: ${moved} (needs ${minGain}%), ${pText(d.p)} (needs below 0.05).`
   if (d.verdict === 'fail') return `Fail: ${moved}, and the rank test shows it's reliably worse (${pText(d.p)}).`
-  if (d.gain < 0) return `Flat: ${moved}, but not reliably worse (${pText(d.p)}).`
+  const sizes = r.clean && `${sizeText(r.clean.best.size)} -> ${sizeText(r.clean.next.size)} in size under the clean rules`
+  if (d.verdict === 'simpler') return `Simpler: ${moved}, which counts as equal, and ${sizes}.`
+  // Smaller code that is still flat lost more than minGain, since anything closer would be simpler
+  const clean = !r.clean ? '' : !r.clean.next.passed ? ' Not simpler: it breaks the clean rules.' : smaller(r.clean) ? ` Not simpler: ${sizes}, but its median is more than ${minGain}% worse.` : ` Not simpler: ${sizes}.`
+  if (d.gain < 0) return `Flat: ${moved}, but not reliably worse (${pText(d.p)}).${clean}`
   const short = [d.gain < minGain && `needs ${minGain}%`, d.p >= 0.05 && `${pText(d.p)}, needs below 0.05`].filter(Boolean).join('; ')
-  return `Flat: ${moved}; ${short}.`
+  return `Flat: ${moved}; ${short}.${clean}`
 }
 
 export function attemptStatusOf(w: World, agent: string, module: string, attempt: string, now: Ms): AttemptStatus | null {
@@ -250,6 +258,7 @@ export function attemptStatusOf(w: World, agent: string, module: string, attempt
     gain: x.judged?.gain ?? null,
     p: x.judged?.p ?? null,
     tests: j.results?.tests ?? null,
+    clean: j.results?.clean ?? null,
     step: x.step,
     failedTurns: failedTurns(m, x.step),
     streak: factsOf(p, m, now).streak,

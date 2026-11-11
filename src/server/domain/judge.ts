@@ -1,6 +1,6 @@
 // How the server turns a job's runs into numbers and a verdict, as DESIGN.md
 // sets out. Pure math: nothing here knows about modules or time.
-import type { Direction, Verdict } from '../../shared/api.ts'
+import type { CleanResults, Direction, Verdict } from '../../shared/api.ts'
 
 export function median(xs: readonly number[]): number {
   const s = [...xs].sort((a, b) => a - b)
@@ -84,9 +84,21 @@ export interface JobResult {
   killed: boolean
   best: readonly number[]
   next: readonly number[]
+  /** The clean rules on both commits. Absent when the verifiers have no clean command. */
+  clean?: CleanResults | null
 }
 
 const betterIn = (direction: Direction) => (x: number, y: number) => (direction === 'lower' ? x < y : x > y)
+
+/**
+ * The new commit follows the clean rules and is smaller than the best commit
+ * by their measure. When the best commit breaks the rules, following them at
+ * no larger a size is enough. A best commit with no size can't be compared.
+ */
+export function smaller(c: CleanResults | null | undefined): boolean {
+  if (!c || !c.next.passed || c.best.size === null) return false
+  return c.best.passed ? c.next.size < c.best.size : c.next.size <= c.best.size
+}
 
 export function judge(r: JobResult, goal: { direction: Direction; minGain: number }): Judged {
   const none = { median: null, bestMedian: null, gain: null, p: null }
@@ -95,12 +107,14 @@ export function judge(r: JobResult, goal: { direction: Direction; minGain: numbe
   const next = median(r.next)
   const gain = gainOf(bestMedian, next, goal.direction)
   const better = betterIn(goal.direction)
+  // Short of a win and not reliably worse, a median within minGain of the best counts as equal
+  const flat = gain >= -goal.minGain && smaller(r.clean) ? 'simpler' : 'flat'
   if (gain >= 0) {
     const p = rankP(r.next, r.best, better)
-    return { verdict: gain >= goal.minGain && p < 0.05 ? 'win' : 'flat', median: next, bestMedian, gain, p }
+    return { verdict: gain >= goal.minGain && p < 0.05 ? 'win' : flat, median: next, bestMedian, gain, p }
   }
   const p = rankP(r.next, r.best, (x, y) => better(y, x))
-  return { verdict: p < 0.05 ? 'fail' : 'flat', median: next, bestMedian, gain, p }
+  return { verdict: p < 0.05 ? 'fail' : flat, median: next, bestMedian, gain, p }
 }
 
 /** A finished step holds the metric unless the rank test shows the head commit worse than the best at p below 0.05. */

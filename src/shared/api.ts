@@ -14,8 +14,17 @@ export type ChangeId = Brand<string, 'ChangeId'>
 /** An ISO 8601 timestamp from the server's clock. */
 export type Iso = Brand<string, 'Iso'>
 
-export type Verdict = 'win' | 'flat' | 'fail'
+export type Verdict = 'win' | 'simpler' | 'flat' | 'fail'
 export type Direction = 'lower' | 'higher'
+
+/** A commit under the verifiers' clean rules: whether it follows them, and its size by their measure. One that prints no size doesn't follow them. */
+export type Clean = { passed: true; size: number } | { passed: false; size: number | null }
+
+/** The clean rules on the best commit and on the new one, from the same job. */
+export interface CleanResults {
+  best: Clean
+  next: Clean
+}
 
 export interface Goal {
   metric: string
@@ -239,6 +248,8 @@ export interface AttemptDetail {
   gain: number | null
   /** One-sided Mann-Whitney p-value. */
   p: number | null
+  /** Null when the verifiers have no clean command, or it didn't run. */
+  clean: CleanResults | null
   touchedVerifiers: string[]
   /** The sandbox the job ran in, once a runner has sent its results. */
   sandbox: Sandbox | null
