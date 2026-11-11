@@ -54,6 +54,7 @@ import {
   FAILED_TURNS,
   HOLD_GRACE_MINUTES,
   MAX_RUNNER_ERRORS,
+  VERDICTS,
   goalMismatch,
   goalOf,
   ended,
@@ -354,12 +355,12 @@ function judgeAttempt(p: ProjectRec, m: ModuleRec, x: AttemptRec, j: JobRec, at:
   }
 
   const f = factsOf(p, m, at)
-  const verdict = x.judged.verdict
+  const verdict = VERDICTS[x.judged.verdict]
   if (m.state === 'active') {
-    if (verdict === 'win' && f.target !== null && reaches(x.judged.median!, f.target, m.goal.direction))
+    if (verdict.canMeetTarget && f.target !== null && reaches(x.judged.median!, f.target, m.goal.direction))
       move(m, x.step < m.steps.length ? 'metTargetStepsLeft' : 'metTarget', at)
-    else if (verdict === 'fail' && failedTurns(m, x.step) >= FAILED_TURNS) move(m, 'stepFailed', at)
-  } else if (m.state === 'pastTarget' && verdict !== 'win') move(m, 'streakEnded', at)
+    else if (verdict.failedTurn && failedTurns(m, x.step) >= FAILED_TURNS) move(m, 'stepFailed', at)
+  } else if (m.state === 'pastTarget' && verdict.streak === 'ends') move(m, 'streakEnded', at)
 }
 
 function checkStep(m: ModuleRec, j: JobRec, at: Ms, fresh: boolean) {

@@ -1,6 +1,8 @@
-// The module lifecycle as one table, which states take which calls, and the
-// checks a spec passes before the server stores it. Commands consult these
-// instead of testing states inline, so each rule lives in one place.
+// The module lifecycle as one table, what each verdict does as another, which
+// states take which calls, and the checks a spec passes before the server
+// stores it. Commands consult these instead of testing states inline, so each
+// rule lives in one place.
+import type { Verdict } from '../../shared/api.ts'
 import type { Config, Goal, GoalSpec, ModuleSpec, ModuleState, ProjectGoal, ProjectGoalSpec, ProjectSpec, StuckCause, VerifierSpec } from './records.ts'
 
 /** Every event that moves a module, and where it moves each state that allows it. */
@@ -44,6 +46,24 @@ export const TAKES = {
 } as const satisfies Record<string, readonly ModuleState[]>
 
 export const takes = (call: keyof typeof TAKES, state: ModuleState) => (TAKES[call] as readonly ModuleState[]).includes(state)
+
+/** How a verdict touches a run of wins. */
+export type Streak = 'extends' | 'holds' | 'ends'
+
+/**
+ * What each verdict does to its module, so queries and commands read an
+ * effect instead of naming verdicts. Only a verdict that extends a streak
+ * earns an extension, and only one that ends it passes a module past its
+ * target.
+ */
+export const VERDICTS = {
+  win: { movesHead: true, movesBest: true, streak: 'extends', canMeetTarget: true, failedTurn: false },
+  flat: { movesHead: true, movesBest: false, streak: 'ends', canMeetTarget: false, failedTurn: false },
+  fail: { movesHead: false, movesBest: false, streak: 'ends', canMeetTarget: false, failedTurn: true },
+} as const satisfies Record<Verdict, { movesHead: boolean; movesBest: boolean; streak: Streak; canMeetTarget: boolean; failedTurn: boolean }>
+
+/** Whether a judged verdict has an effect. An attempt not yet judged has none. */
+export const does = (verdict: Verdict | undefined, effect: 'movesHead' | 'movesBest' | 'canMeetTarget' | 'failedTurn') => verdict !== undefined && VERDICTS[verdict][effect]
 
 export const ended = (state: ModuleState) => state === 'passed' || state === 'abandoned'
 /** The states whose clock runs. */
