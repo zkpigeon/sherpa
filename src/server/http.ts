@@ -185,7 +185,8 @@ function approval(s: Service, change: string): { rebased: { spec: VerifierSpec; 
   const others = []
   for (const m of found.p.modules) {
     const v = verifiersOf(m)
-    if (m === found.m || m.state !== 'pending' || !v || baselineJob(m)) continue
+    // A borrowed set is another module's, and its verifier writes this one its own
+    if (m === found.m || m.state !== 'pending' || !v || v.from || baselineJob(m)) continue
     const files = filesOf(s, v.hash)
     // Only where the changed files are still what the change was written against
     if (!found.c.changed.every((path) => files[path] === baseUpload.files[path])) continue

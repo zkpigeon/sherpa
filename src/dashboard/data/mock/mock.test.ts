@@ -73,8 +73,8 @@ test('the initial board shows every state the dashboard has to handle', () => {
     'a stuck module',
   )
   assert.ok(
-    cur.some((m) => m.status.state === 'pending' && m.status.waitingFor === 'verifiers'),
-    'pending, waiting for verifiers',
+    cur.some((m) => m.status.state === 'pending' && m.verifiers.kind === 'frozen' && m.verifiers.from),
+    'pending on verifiers borrowed from the module before',
   )
   assert.ok(
     cur.some((m) => m.clock.kind === 'grace'),

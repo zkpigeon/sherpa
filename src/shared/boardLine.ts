@@ -25,7 +25,7 @@ function status(m: Module, now: Date) {
   if (s.state === 'pending') {
     if (s.waitingFor === 'turn') return 'Not started.'
     // Frozen verifiers it still waits for are ones its baseline failed on
-    if (s.waitingFor === 'verifiers' && m.verifiers.kind === 'frozen') return `Its baseline failed on its verifiers, so it waits for an approved change request.${from} ${WHILE_VERIFIERS}`
+    if (s.waitingFor === 'verifiers' && m.verifiers.kind === 'frozen') return `Its baseline failed on its verifiers, so it waits for the verifier's fix.${from} ${WHILE_VERIFIERS}`
     if (s.waitingFor === 'verifiers') return `Waiting for its verifiers.${from} ${WHILE_VERIFIERS}`
     return `Waiting for its baseline.${from} Meanwhile, read the module and plan its first attempt. ${NOTHING_HEAVY}`
   }

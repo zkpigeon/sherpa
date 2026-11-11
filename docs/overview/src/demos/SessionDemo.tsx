@@ -51,7 +51,7 @@ const NEXT: Tile = {
   metric: { ...START.metric, target: null },
   attempts: [],
   minutesLeft: null,
-  timeNote: 'Waiting for verifiers',
+  timeNote: 'Waiting for its baseline',
 }
 
 const initial: S = { down: false, n: 5, tile: START }

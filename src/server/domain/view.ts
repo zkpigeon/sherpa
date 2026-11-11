@@ -72,7 +72,7 @@ function moduleOf(p: ProjectRec, m: ModuleRec, now: Ms): Module {
     status: statusOf(p, m),
     steps: m.steps.map((s, i) => ({ title: s.title, done: s.doneAt !== null, failedTurns: failedTurns(m, i + 1) })),
     goal: { ...m.goal, baseline: f.baseline, target: f.target },
-    verifiers: v ? { kind: 'frozen', hash: v.hash, tests, author: v.author, hardware: v.hardware, openChanges: m.changes.filter((c) => c.state === 'open').length } : { kind: 'missing' },
+    verifiers: v ? { kind: 'frozen', hash: v.hash, tests, author: v.author, hardware: v.hardware, openChanges: m.changes.filter((c) => c.state === 'open').length, ...(v.from ? { from: v.from } : {}) } : { kind: 'missing' },
     changes: m.changes.map((c) => ({
       id: c.id,
       author: c.author,
@@ -130,8 +130,8 @@ export interface AgentProject {
   progress: Project['progress']
   /** Null once every module has ended. */
   current: ModuleId | null
-  /** `failed`: frozen, but the baseline job failed on them, so the module waits for a change request. */
-  modules: { id: ModuleId; position: number; title: string; status: ModuleStatus; steps: string[]; goal: Goal; verifiers: 'missing' | 'frozen' | 'failed'; openChanges: number }[]
+  /** `inherited`: borrowed from the module before, until the verifier submits the module's own. `failed`: frozen, but the baseline job failed on them, so the module waits for a change request. */
+  modules: { id: ModuleId; position: number; title: string; status: ModuleStatus; steps: string[]; goal: Goal; verifiers: 'missing' | 'inherited' | 'frozen' | 'failed'; openChanges: number }[]
   /** Titles of the agent's projects waiting to start. */
   queued: string[]
 }
@@ -147,7 +147,7 @@ export function agentProjectOf(a: AgentRec, now: Ms): AgentProject | null {
     status: m.status,
     steps: m.steps.map((s) => s.title),
     goal: m.goal,
-    verifiers: m.verifiers.kind === 'frozen' && m.status.state === 'pending' && m.status.waitingFor === 'verifiers' ? ('failed' as const) : m.verifiers.kind,
+    verifiers: m.verifiers.kind === 'frozen' && m.verifiers.from ? ('inherited' as const) : m.verifiers.kind === 'frozen' && m.status.state === 'pending' && m.status.waitingFor === 'verifiers' ? ('failed' as const) : m.verifiers.kind,
     openChanges: m.verifiers.kind === 'frozen' ? m.verifiers.openChanges : 0,
   }))
   return { title: p.title, goal, state, progress, current: p.current, modules, queued }

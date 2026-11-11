@@ -775,6 +775,40 @@ test('once every module has ended, the project waits for the next one, which sta
   assert.equal(projectView(w, at(12)).state, 'open')
 })
 
+test('a module whose turn comes before its verifiers borrows the set the module before it measured on, until the verifier sends its own', () => {
+  const w = started([mod('cache', ['one', 'two']), mod('index', ['only', 'more', 'last'])])
+  attempt(w, at(5), 'a1', 85)
+  attempt(w, at(6), 'a2', 85.5)
+  const v = viewOf(w, 'm2', at(6)).verifiers
+  assert.deepEqual(v.kind === 'frozen' && [v.hash, v.from], ['h1', 'm1'])
+  assert.equal(agentProjectOf(agentOf(w, 'a')!, at(6))!.modules[1]!.verifiers, 'inherited')
+  measure(w, at(7), 100, 85)
+  assert.equal(run(w, at(7), 85).verifierHash, 'h1')
+  assert.equal(viewOf(w, 'm2', at(7)).status.state, 'active')
+  // The borrowed step commands are m1's, so none of m2's steps can be checked on them
+  rejects(w, at(8), (x) => stepDone(x, at(8), { agent: 'a', module: 'm2', step: 1 }), 'verifiersMissing')
+
+  must(freezeVerifiers(w, at(9), { agent: 'a', module: 'm2', author: 'verifier', verifiers: verifiers(3, 'h2') }))
+  const t = run(w, at(9), 85)
+  assert.deepEqual([t.kind, t.verifierHash], ['baseline', 'h2'])
+  step(w, at(10), 1, 85)
+  assert.equal(viewOf(w, 'm2', at(10)).steps[0]!.done, true)
+  rejects(w, at(11), (x) => freezeVerifiers(x, at(11), { agent: 'a', module: 'm2', author: 'verifier', verifiers: verifiers(3, 'h3') }), 'verifiersFrozen')
+})
+
+test('before a baseline measures anything, the verifier’s fix is approved at once, and the agent’s own request waits for the admin', () => {
+  const w = emptyWorld()
+  must(createProject(w, at(0), { agent: 'a', spec: { title: 'search', startCommit: START, modules: [mod('cache')] } }))
+  must(freezeVerifiers(w, at(0), { agent: 'a', module: 'm1', author: 'verifier', verifiers: verifiers(2) }))
+  run(w, at(1), 100, { tests: [9, 10] })
+  assert.equal(must(fileChange(w, at(2), { agent: 'a', module: 'm1', reason: 'A test needs the network.', proposed: verifiers(2, 'h2') })).state, 'open')
+  assert.equal(must(fileChange(w, at(2), { agent: 'a', module: 'm1', reason: 'A test needs the network.', proposed: verifiers(2, 'h3'), author: 'verifier' })).state, 'approved')
+  assert.equal(run(w, at(3), 100).verifierHash, 'h3')
+  assert.equal(viewOf(w, 'm1', at(3)).status.state, 'active')
+  // Once a baseline is measured, a change waits for the admin, whoever filed it
+  assert.equal(must(fileChange(w, at(4), { agent: 'a', module: 'm1', reason: 'A slower benchmark.', proposed: verifiers(2, 'h4'), author: 'verifier' })).state, 'open')
+})
+
 test('a module’s verifiers can ask for more runs per commit', () => {
   const w = emptyWorld()
   must(createProject(w, at(0), { agent: 'a', spec: { title: 'noisy', startCommit: START, modules: [mod('cache')] } }))

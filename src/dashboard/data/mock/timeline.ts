@@ -37,7 +37,7 @@ export const TIMELINE: TimelineEvent[] = [
   event('agent 3 abandons fixture reuse and proposes isolated contexts', (w, at) => {
     const reason = 'Every attempt assumed browser contexts are safe to share across files, but shared contexts leak state between tests.'
     must(abandon(w, at, { agent: '3', module: 'm2', reason, followUp: ISOLATED_CONTEXTS.spec }, MOCK_CONFIG))
-    blurb(w, '3', 'Waiting for verifiers on isolated contexts.', at)
+    blurb(w, '3', 'Starting isolated contexts on fixture reuse’s verifiers.', at)
   }),
   event('agent 6’s a5 wins and earns an extension', (w, at) => results(w, '6', 'm1', 'a5', { median: 841 }, at)),
   event('the verifier agent freezes agent 4’s retry, and a runner starts its baseline', (w, at) =>
