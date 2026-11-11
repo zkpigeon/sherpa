@@ -87,6 +87,8 @@ export function flagTitle(f: Pick<Flag, 'kind' | 'attempt'>): string {
   switch (f.kind) {
     case 'touchedVerifier':
       return `${who} touched a verifier file`
+    case 'rewroteVerifier':
+      return `${who} changed a frozen file while it ran`
     case 'fewerTests':
       return `${who} ran fewer tests than the job before`
     case 'lessWork':

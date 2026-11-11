@@ -60,7 +60,7 @@ export function finish(w: World, job: JobId, outcome: Outcome, opts: ResultOptio
   const runner = j.claims.at(-1)!.runner
   const v = verifierSet(m, j.verifierHash)!
   const touched = opts.touched ?? []
-  const send = (results: Parameters<typeof sendResults>[2]['results']) => must(sendResults(w, at, { job, runner, results }, MOCK_CONFIG))
+  const send = (results: Parameters<typeof sendResults>[2]['results']) => must(sendResults(w, at, { job, runner, results: { sandbox: 'strict', ...results } }, MOCK_CONFIG))
   if ('killed' in outcome) return send({ outcome: 'killed', tests: null, runs: [], touched })
 
   const total = opts.testsTotal ?? [v.commands.regression, ...j.stepTests.map((n) => v.commands.steps[n - 1]!)].reduce((sum, c) => sum + count(c), 0)

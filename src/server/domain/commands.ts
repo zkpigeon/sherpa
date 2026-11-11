@@ -2,7 +2,7 @@
 // at the call's time first, as the server does on every request. Then it
 // either rejects without touching anything, or applies the change and
 // returns what the caller needs. Repeating a call has no further effect.
-import type { AgentId, AttemptId, ChangeId, Commit, FlagKind, Iso, JobId, JobState, ModuleId } from '../../shared/api.ts'
+import { SANDBOXES, type AgentId, type AttemptId, type ChangeId, type Commit, type FlagKind, type Iso, type JobId, type JobState, type ModuleId } from '../../shared/api.ts'
 import { holds, judge, reaches } from './judge.ts'
 import {
   agentOf,
@@ -328,6 +328,8 @@ function landBaseline(m: ModuleRec, j: JobRec, at: Ms) {
   const why =
     r.outcome === 'killed'
       ? 'ran past its time limit'
+      : r.outcome === 'tampered'
+        ? `was thrown out because a command changed the frozen ${(r.tampered ?? []).join(', ')}`
       : r.outcome === 'badCommit'
         ? `couldn't fetch the start commit: ${r.error ?? ''}`.trim()
         : r.tests && r.tests.passed < r.tests.total
@@ -373,6 +375,9 @@ function checkStep(m: ModuleRec, j: JobRec, at: Ms, fresh: boolean) {
 }
 
 function apply(p: ProjectRec, m: ModuleRec, j: JobRec, at: Ms, fresh: boolean) {
+  const r = j.results!
+  const attempt = j.kind === 'attempt' ? (m.attempts.findLast((y) => y.job === j.id)?.id ?? null) : null
+  if (fresh && r.outcome === 'tampered') flag(m, 'rewroteVerifier', attempt, `${(r.tampered ?? []).join(', ') || 'A frozen file'} changed while the ${j.kind} job ran on ${j.commit.slice(0, 7)}, so the runner threw the job out.`, at)
   // A project's final measurement only feeds the summary, which is derived
   if (j.kind === 'final') return
   if (j.kind === 'baseline') return landBaseline(m, j, at)
@@ -791,7 +796,9 @@ export function renewLease(w: World, at: Ms, args: { job: string; runner: string
 
 function resultsProblem(r: JobResults | undefined, j: JobRec, runs: number): string | null {
   if (!r || typeof r !== 'object') return 'Results must be an object.'
-  if (!['done', 'killed', 'badCommit', 'error'].includes(r.outcome)) return 'outcome must be done, killed, badCommit, or error.'
+  if (!['done', 'killed', 'badCommit', 'tampered', 'error'].includes(r.outcome)) return 'outcome must be done, killed, badCommit, tampered, or error.'
+  if (r.sandbox !== undefined && !SANDBOXES.includes(r.sandbox)) return `sandbox must be ${SANDBOXES.join(' or ')}.`
+  if (r.tampered !== undefined && (!Array.isArray(r.tampered) || r.tampered.length > 1000 || !r.tampered.every((x) => typeof x === 'string'))) return 'tampered must be a list of file paths.'
   const t = r.tests ?? null
   const count = (x: unknown) => Number.isSafeInteger(x) && (x as number) >= 0
   if (t !== null && (typeof t !== 'object' || !count(t.passed) || !count(t.total) || t.passed > t.total)) return 'tests must be null or whole numbers with passed no more than total.'
@@ -834,6 +841,8 @@ export function sendResults(w: World, at: Ms, args: { job: string; runner: strin
     tests: r.tests && { passed: r.tests.passed, total: r.tests.total },
     runs: r.runs.map((run) => ({ commit: run.commit.toLowerCase() as Commit, value: run.value, work: run.work })),
     touched: r.touched.slice(0, 1000),
+    ...(r.tampered?.length ? { tampered: r.tampered.slice(0, 1000) } : {}),
+    ...(r.sandbox ? { sandbox: r.sandbox } : {}),
     ...(r.error ? { error: String(r.error).slice(0, 500) } : {}),
   }
   // A commit the runner can't fetch fails like failing tests, but isn't stored as a result to reuse

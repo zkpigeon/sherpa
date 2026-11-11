@@ -190,6 +190,12 @@ export function AttemptPage({ agent, module, attempt }: { agent: AgentId; module
               Frozen verifiers <span className="mono">{short(d.verifierHash)}</span> copied over both
             </span>
           </div>
+          {d.sandbox && (
+            <div className="at__line">
+              <Icon name="lock" className="icon-lock" />
+              <span>{d.sandbox === 'strict' ? 'Strict sandbox, no network' : 'Open sandbox, on the runner'}</span>
+            </div>
+          )}
           <div className="at__line">
             <Tests d={d} />
           </div>

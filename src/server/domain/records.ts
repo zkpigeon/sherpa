@@ -3,7 +3,7 @@
 // waits, extensions and the deadline) is computed in queries.ts and never
 // stored, so the numbers can't drift apart. Nothing here touches I/O, so the
 // dashboard's mock runs the same code in the browser.
-import type { AgentId, AttemptId, ChangeId, Commit, Direction, FlagKind, Iso, JobId, JobState, ModuleId, Run } from '../../shared/api.ts'
+import type { AgentId, AttemptId, ChangeId, Commit, Direction, FlagKind, Iso, JobId, JobState, ModuleId, Run, Sandbox } from '../../shared/api.ts'
 import type { Judged } from './judge.ts'
 
 /** Milliseconds since the epoch. */
@@ -91,15 +91,19 @@ export interface VerifierSpec {
 export interface JobResults {
   /**
    * `done`: the job ran. `killed`: it ran past its time limit. `badCommit`: the
-   * commit under test can't be fetched. `error`: the runner couldn't run it, so
-   * it goes back in the queue.
+   * commit under test can't be fetched. `tampered`: a command changed a frozen
+   * verifier file, so the runner threw the job out. `error`: the runner
+   * couldn't run it, so it goes back in the queue.
    */
-  outcome: 'done' | 'killed' | 'badCommit' | 'error'
+  outcome: 'done' | 'killed' | 'badCommit' | 'tampered' | 'error'
   /** Null when no tests ran. */
   tests: { passed: number; total: number } | null
   runs: Run[]
   /** Verifier files the commit changed. The runner used the frozen copies. */
   touched: string[]
+  /** Frozen files a command changed while the job ran. */
+  tampered?: string[]
+  sandbox?: Sandbox
   error?: string
 }
 
