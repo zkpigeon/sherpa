@@ -49,5 +49,5 @@ Rejections come back as `{"error": "<code>", "message": "<sentence>"}`: 400 for 
 |---|---|
 | `POST /jobs/claim` | Claims the next job whose hardware label the runner has: `{"runner": "runner-1", "labels": ["cpu"]}`. 204 when there's none |
 | `POST /jobs/{job}/lease` | Renews the lease on a job the runner holds |
-| `POST /jobs/{job}/results` | Sends a job's runs, test results, and the verifier files its commit touched |
+| `POST /jobs/{job}/results` | Sends a job's `outcome` (`done`, `killed`, `badCommit`, `tampered`, or `error`), runs, test results, the verifier files its commit touched, the frozen files a command changed (`tampered`), and the `sandbox` it ran in |
 | `GET /healthz` | `ok`, with no token |

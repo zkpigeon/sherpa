@@ -13,7 +13,7 @@ Created in [T3 Code](https://t3.codes).
 1. **You connect a checkout to an agent and give it a goal,** such as "p95 latency under 250 ms within 8 hours". The agent plans a project toward it: one hill climb, split into modules. Each module is one approach with its own smaller goal, such as "10% lower", and ordered steps.
 2. **A verifier agent writes the tests and benchmark** for each module, in its own session. They freeze when submitted, so the agent that climbs can't change them.
 3. **The agent commits each attempt and posts its hash.** It never reports a number.
-4. **A runner measures the attempt** in a container with no network. It runs the tests on the new commit, then the benchmark on it and on the best commit, taking turns.
+4. **A runner measures the attempt**, by default in a container with no network. It runs the tests on the new commit, then the benchmark on it and on the best commit, taking turns. Whatever the sandbox, the agent can't change the tests or the benchmark. [Sandbox](#sandbox) explains the choice.
 5. **The server judges the attempt.**
    - A win moves the best commit and can earn more time.
    - A flat keeps the work but not the credit.
@@ -114,6 +114,7 @@ The board shows a tile for each agent: its current module, the metric against it
 The dashboard also flags anything that needs a look:
 
 - a commit that touches verifier files
+- a job thrown out because a command changed a frozen file while it ran
 - an attempt that runs fewer tests, or does less work per run
 - verifiers written by the agent that works the module
 - a baseline that failed
@@ -142,8 +143,63 @@ To end a project, open its agent and use **Stop project**. You confirm first, an
 | `SHERPA_REPOS` | `./repos` | The host folder of bare repos, which the runner mounts read-only at `/repos` |
 | `SHERPA_CPUSET` | None | Pins job containers to these cores, such as `2-5`, for steadier benchmarks |
 | `SHERPA_MEMORY` | None | A memory limit for each job container, such as `4g` |
+| `SHERPA_SANDBOX` | `strict` | `strict` runs each commit in a bare container. `open` runs it on the machine, through `scripts/open-runner.sh`. See [Sandbox](#sandbox) |
 
 If you change a token, run `connect.sh` again on each checkout to update its `.sherpa/env`.
+
+## Sandbox
+
+`SHERPA_SANDBOX` in `.env` sets how much the runner isolates the code it measures. It is `strict` or `open`, and it is `strict` unless you change it.
+
+One thing is the same in both: **the agent can never change the benchmark.** The runner copies the frozen tests and benchmark over each checkout, read-only, before anything runs. After every command, it checks each frozen file. A command that changed one, even to the same bytes, gets the whole job thrown out. The attempt counts as a fail, and the dashboard flags it.
+
+### What each mode does
+
+| | `strict` (default) | `open` |
+|---|---|---|
+| Where a commit runs | Its own bare Docker container | A plain process on the runner's machine, in the checkout |
+| Network | None | The machine's |
+| Toolchain and GPUs | Only what the verifiers' image has | Everything the machine has |
+| Runner's secrets | None reach the job | None reach the job. It sees `HOME`, `PATH`, `LANG`, and a few locale and certificate settings |
+| Files outside the checkout | Out of reach | Readable and writable, as the runner's user |
+| Leftover processes | Killed after every command | The command's process group is killed when it ends |
+| A changed frozen file | Throws the job out | Throws the job out |
+| `SHERPA_CPUSET`, `SHERPA_MEMORY` | Apply | Don't apply |
+| Needs | Docker | Node 26 and git on the machine |
+
+### Why strict is the default
+
+A climb is only worth what its measurement is worth. Agents run for hours with nobody reading each commit before the runner executes it. Strict mode makes that safe without trusting the code: the worst an attempt can do is fail.
+
+Strict also closes the gaps that checking can't. The check after each command sees a frozen file that changed. It can't see a process that reads the other commit's checkout, or a call to the network that fetches a better answer. In strict mode neither is possible. No network also keeps runs comparable, since there is no remote cache or service that answers faster the second time.
+
+### When to use open
+
+Use open when the strict sandbox costs more than it protects:
+
+- the machine can't run Docker, or containers can't reach its GPU,
+- the benchmark needs the machine's own toolchain, a local service, a license server, or the network,
+- container overhead shows up in the metric you're climbing,
+- you trust the code: you run the agent on your own repo, and you watch the dashboard's flags.
+
+### What open limits, and what it doesn't
+
+Open keeps the benchmark safe from edits. It doesn't keep the machine safe from the code under test.
+
+- Code under test can read any file the runner's user can, and use the network. A read leaves no trace for the runner to check.
+- It can change files outside its checkout. A change to a frozen file is caught. A change to anything else isn't.
+- A process that leaves its process group on purpose, such as with `setsid`, can outlive its command and slow the next run.
+- Other work on the machine shares the CPU with the benchmark, so expect noisier runs. Raise `runs` in the verifiers if gains come out flat.
+
+Run an open runner only on a machine you'd let the agent use directly, under a user that holds nothing you'd mind it reading.
+
+### Turn on open
+
+1. Set `SHERPA_SANDBOX=open` in `.env`.
+2. Run `sh scripts/setup.sh`. The Compose runner then stands down, since it holds the Docker socket and an open job would inherit it.
+3. Run `sh scripts/open-runner.sh` on the same machine, and keep it running. It reads `.env`, finds the bare repos in `SHERPA_REPOS`, and claims jobs as `runner-1-open`.
+
+To go back, set `SHERPA_SANDBOX=strict`, stop `open-runner.sh`, and run `sh scripts/setup.sh`. Each attempt's page on the dashboard shows the sandbox its job ran in.
 
 ## Run it on a server, or add runners
 
@@ -257,9 +313,9 @@ npm run dev         # the dashboard on mock data, at http://127.0.0.1:5320
 |---|---|
 | `src/server/domain` | The rules: records, the lifecycle table, commands, the judge, and the board view. There's no I/O, so the dashboard's mock runs the same code |
 | `src/server` | The SQLite store, the HTTP API, the sign-in, and `main.ts` |
-| `src/runner` | Checkouts, the Docker and local executors, and the job loop |
+| `src/runner` | Checkouts, the strict (Docker) and open executors, and the job loop |
 | `src/dashboard` | The React dashboard. `VITE_DATA=mock` builds it on scripted demo data, as the hosted demo does |
 | `src/shared` | The contract between the server and the dashboard, and the board line |
-| `scripts` | `setup.sh`, `connect.sh`, the hook, and `shoot.mjs`, which screenshots dashboard pages |
+| `scripts` | `setup.sh`, `connect.sh`, `open-runner.sh`, the hook, and `shoot.mjs`, which screenshots dashboard pages |
 
-To run the services without Docker, set the three tokens and run `npm run build && npm run server`, then `SHERPA_URL=http://127.0.0.1:8080 npm run runner`. `npm run build:demo` builds the dashboard on mock data for static hosting.
+To run the services without Docker, set the three tokens and run `npm run build && npm run server`, then `SHERPA_SANDBOX=open SHERPA_URL=http://127.0.0.1:8080 npm run runner`. `npm run build:demo` builds the dashboard on mock data for static hosting.

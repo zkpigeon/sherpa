@@ -7,3 +7,4 @@ shots/
 *.db-shm
 *.db-wal
 repos/
+.open-runner/

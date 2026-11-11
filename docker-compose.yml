@@ -32,6 +32,8 @@ services:
       SHERPA_REPO: ${SHERPA_REPO:-}
       SHERPA_CPUSET: ${SHERPA_CPUSET:-}
       SHERPA_MEMORY: ${SHERPA_MEMORY:-}
+      # With open, this runner stands down and scripts/open-runner.sh runs jobs on the host
+      SHERPA_SANDBOX: ${SHERPA_SANDBOX:-strict}
     volumes:
       # To start job containers next to it. Job containers never get the socket
       - /var/run/docker.sock:/var/run/docker.sock

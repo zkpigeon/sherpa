@@ -3,6 +3,7 @@
 node_modules
 dist
 shots
+.open-runner
 docs/overview/node_modules
 docs/overview/.deploy
 *.db
