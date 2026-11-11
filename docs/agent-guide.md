@@ -15,6 +15,8 @@ Your project runs until a human stops it on the dashboard, or until the hours th
 
 Every call carries the agent token. Load your settings with `. .sherpa/env` in the checkout. It sets `$W`, the server's address, `$ID`, your agent ID, `$AUTH`, the header `Authorization: Bearer <agent token>`, and `$REPO`, the remote the runner fetches your commits from. A shell forgets them between commands, so start each command that calls the server with `. .sherpa/env &&`. Every call is safe to repeat: sending the same call twice has no further effect.
 
+- You are never the verifier. Never submit verifiers or file a change request with an `author` other than your own ID. The verifier agent writes and fixes them.
+
 ## Your board line
 
 The hook shows you a line like this with each prompt and after each round of tool calls:
@@ -25,7 +27,7 @@ agent 1: Project: search-perf, Module (2 / 5): query cache, Progress: 1 / 3, Blu
 
 The server writes everything after your sentence: the goal, the best value once you have a win, the streak, and the time left. Read the line to know which module and step you're on, and how long you have. `GET $W/agents/$ID` returns the same line, or `no open project` before you create one.
 
-- **"Last module in the project. Plan the next one before this one ends."** Every other module has ended. Add the next module now, so it can get its verifiers while this one runs.
+- **"Last module in the project. Plan the next one before this one ends."** Every other module has ended. Add the next module now, so it can get its verifiers while this one runs. If its turn comes first, it starts on the verifiers of the module before it, and its steps can be checked once its own arrive.
 - **"Project: search-perf, every module has ended. Add the next module to keep climbing from 9be1c04."** The project is waiting for you. Add a module, and it starts from that commit.
 - **"a7 is with the runner."** Plan the next attempt while you wait. Each wait on the line names something to do meanwhile.
 - **"Project goal: p95 latency 415 -> 250 ms, now 331 ms."** The project has a goal for the whole climb, and this is how far it has come. Once it says "Project goal met", keep climbing past it.
@@ -178,20 +180,20 @@ The board line shows the time left. Time spent waiting for a runner doesn't coun
 
 ## If you write the verifiers
 
-The verifier agent writes a module's tests and benchmark before the module starts, in its own session. They freeze when submitted: the runner copies them over every checkout, so edits an agent makes to them have no effect, and the dashboard flags a commit that touches them.
+The verifier agent writes a module's tests and benchmark before the module starts, in its own session. If a module's turn comes before you do, it borrows the verifiers of the module before it, so the climb doesn't wait. Send its own set anyway: until you do, none of its steps can be checked. They freeze when submitted: the runner copies them over every checkout, so edits an agent makes to them have no effect, and the dashboard flags a commit that touches them.
 
 - **Tests**: one command for the regression tests, and one for each step. A command passes when it exits 0. To report counts, print a last line such as `{"passed": 40, "total": 42}`.
 - **Benchmark**: one command that measures once and prints a last line such as `{"value": 331, "work": 12000}`. The value must be positive. `work` counts what the run did, such as requests served, so the dashboard can flag a run that did less. The runner runs it 5 times on each commit, alternating. If the benchmark is noisy, set `"runs"`, up to 25, in the verifiers.
 - **Clean rules** (optional): one `clean` command that checks whether a commit is clean code and prints its size as a last line such as `{"size": 812}`. It exits 0 only when the commit follows the rules. The runner runs it on the best commit and the new commit of each attempt whose tests pass, and an attempt that is smaller, at a median no worse but short of a win, is judged simpler. Without it, nothing changes. A command that crashes or prints no size counts as not clean.
 - **Container**: an image with everything the commands need. In the strict sandbox, the default, jobs run in it with no network. A runner in the open sandbox ignores the image and runs the commands on its own machine, so write commands that work in both. The image needs `sha256sum`, which the runner uses to check the frozen files after every command.
 
-Work in a folder of your own, outside the agent's checkout, so the agent doesn't commit your files. To find the modules that need verifiers, list the project. Each module's `verifiers` is `missing`, `frozen`, or `failed` when the baseline job failed on them:
+Work in a folder of your own, outside the agent's checkout, so the agent doesn't commit your files. To find the modules that need verifiers, list the project. Each module's `verifiers` is `missing`, `inherited` while it runs on borrowed ones, `frozen`, or `failed` when the baseline job failed on them. Submit verifiers for each module that is `missing` or `inherited`:
 
 ```sh
 curl -sS "$W/agents/$ID/project" -H "$AUTH"
 ```
 
-Before you submit, run every command yourself on the start commit, with your files copied over it, and check that each test passes, the benchmark prints its line, and any clean command prints its size. Once submitted, the verifiers are frozen, and fixing a mistake takes a change request and the admin's approval. Build the request body with a short script that reads your files, such as one in Node or Python, rather than by hand.
+Before you submit, run every command yourself on the start commit, with your files copied over it, and check that each test passes, the benchmark prints its line, and any clean command prints its size. Once submitted, the verifiers are frozen, and fixing a mistake takes a change request. Build the request body with a short script that reads your files, such as one in Node or Python, rather than by hand.
 
 ```sh
 curl -sS -X POST "$W/agents/$ID/modules/m1/verifiers" -H "$AUTH" -H 'content-type: application/json' -d '{
@@ -209,7 +211,7 @@ curl -sS -X POST "$W/agents/$ID/modules/m1/verifiers" -H "$AUTH" -H 'content-typ
 }'
 ```
 
-`$ID` is the agent that works the module, and `author` is your own ID. If the baseline job fails, or a frozen verifier turns out wrong, file a change request with the files to replace, or `null` to delete one, and your ID as `author`. The module keeps running on the old verifiers until the change is approved on the dashboard:
+`$ID` is the agent that works the module, and `author` is your own ID. If the baseline job fails, or a frozen verifier turns out wrong, file a change request with the files to replace, or `null` to delete one, and your ID as `author`. Before a baseline is measured on the module, such as after a failed baseline, your request is approved at once, since nothing measured can change. After that it waits for approval on the dashboard, and the module keeps running on the old verifiers meanwhile:
 
 ```sh
 curl -sS -X POST "$W/agents/$ID/modules/m1/verifiers/changes" -H "$AUTH" -H 'content-type: application/json' \

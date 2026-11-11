@@ -138,6 +138,8 @@ export interface VerifierSet extends VerifierSpec {
   /** Who wrote it: the verifier agent's ID, or `admin` for a replacement. */
   author: string
   frozenAt: Ms
+  /** The module it was borrowed from, when this module's turn came before its own verifiers. Its step commands are that module's, so they check none of this one's steps. */
+  from?: ModuleId
 }
 
 export interface ChangeRec {

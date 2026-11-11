@@ -35,6 +35,7 @@ import {
   iso,
   type AgentRec,
   type AttemptRec,
+  type ChangeRec,
   type Config,
   type JobKind,
   type JobRec,
@@ -45,6 +46,7 @@ import {
   type ProjectGoalSpec,
   type ProjectRec,
   type ProjectSpec,
+  type VerifierSet,
   type VerifierSpec,
   type World,
 } from './records.ts'
@@ -192,6 +194,13 @@ function cancel(j: JobRec, at: Ms) {
   j.finishedAt = at
 }
 
+/** Gives a module new verifiers. A module that hasn't started measures its baseline on them, instead of on the set it had. */
+function give(m: ModuleRec, set: VerifierSet, at: Ms) {
+  const flight = m.state === 'pending' && inFlight(m)
+  if (flight) cancel(flight, at)
+  m.verifiers.push(set)
+}
+
 /** A runner couldn't run the job: it goes back in the queue, and after a few tries it fails without a verdict. */
 function runnerError(m: ModuleRec, j: JobRec, error: string, at: Ms) {
   const claim = j.claims.at(-1)!
@@ -230,10 +239,13 @@ function advance(w: World, a: AgentRec, at: Ms, config: Config) {
   if (!p) return
   for (const m of p.modules) remeasure(w, a, p, m, at)
   const m = firstInLine(p)
-  const v = m && verifiersOf(m)
-  if (!m || !v) return
-  const start = startCommits(p)[p.modules.indexOf(m)]
-  if (!start) return
+  const start = m && startCommits(p)[p.modules.indexOf(m)]
+  if (!m || !start) return
+  // A module whose turn comes before its own verifiers borrows the set that measured the module before it, so the climb never waits on the verifier
+  const host = !verifiersOf(m) && measureHost(p)
+  if (host) m.verifiers.push({ ...verifierSet(host, latestBaseline(host)!.verifierHash)!, from: host.id, frozenAt: at })
+  const v = verifiersOf(m)
+  if (!v) return
   // One in flight keeps the verifiers it was queued with, and one that failed waits for new verifiers, which change the key
   const key = jobKey('baseline', a, m, start, null, null, v.hash)
   if (m.jobs.some((j) => j.kind === 'baseline' && (j.state === 'queued' || j.state === 'running'))) return
@@ -337,7 +349,7 @@ function landBaseline(m: ModuleRec, j: JobRec, at: Ms) {
         : r.tests && r.tests.passed < r.tests.total
           ? `failed its tests on the start commit: ${r.tests.passed} of ${r.tests.total} passed`
           : 'measured nothing'
-  const next = m.state === 'pending' ? `${m.id} waits for an approved change request, or an abandon.` : `${m.id} keeps its old baseline, which its new verifiers may not match.`
+  const next = m.state === 'pending' ? `${m.id} waits for the verifier's fix, or an abandon.` : `${m.id} keeps its old baseline, which its new verifiers may not match.`
   flag(m, 'baselineFailed', null, `The baseline job ${why}. ${next}`, at)
 }
 
@@ -477,8 +489,9 @@ export function freezeVerifiers(w: World, at: Ms, args: { agent: string; module:
   if (problem) return invalid('badSpec', problem)
   if (!takes('verifiers', m.state)) return conflict('wrongState', `${m.id} has ${m.state === 'passed' ? 'passed' : 'been abandoned'}, so its verifiers can't change.`)
   const current = verifiersOf(m)
-  if (current) return current.hash === args.verifiers.hash ? ok({ hash: current.hash }) : conflict('verifiersFrozen', `${m.id}'s verifiers are frozen. File a change request instead.`)
-  m.verifiers.push({ ...normalVerifiers(args.verifiers), author: args.author, frozenAt: at })
+  if (current && !current.from) return current.hash === args.verifiers.hash ? ok({ hash: current.hash }) : conflict('verifiersFrozen', `${m.id}'s verifiers are frozen. File a change request instead.`)
+  // The module's own set replaces a borrowed one
+  give(m, { ...normalVerifiers(args.verifiers), author: args.author, frozenAt: at }, at)
   if (args.author === a.id) flag(m, 'selfAuthoredVerifiers', null, `Agent ${a.id} wrote the verifiers for ${m.id}, the module it works.`, at)
   advance(w, a, at, config)
   return ok({ hash: args.verifiers.hash })
@@ -489,7 +502,7 @@ export function fileChange(
   at: Ms,
   args: { agent: string; module: string; reason: string; proposed: VerifierSpec; changed?: string[]; author?: string },
   config: Config = DEFAULTS,
-): Result<{ change: ChangeId }> {
+): Result<{ change: ChangeId; state: ChangeRec['state'] }> {
   settle(w, at, config)
   const found = find(w, args.agent, args.module)
   if (!found.ok) return found
@@ -505,12 +518,19 @@ export function fileChange(
   const reason = args.reason.trim()
   // The same request again, open or already rejected, is a repeat
   const same = m.changes.find((c) => c.state !== 'approved' && c.proposed.hash === args.proposed.hash && c.reason === reason)
-  if (same) return ok({ change: same.id })
+  if (same) return ok({ change: same.id, state: same.state })
   w.changes++
   const id = `c${w.changes}` as ChangeId
   const changed = Array.isArray(args.changed) ? args.changed.filter((x) => typeof x === 'string').slice(0, 200) : [...args.proposed.paths]
-  m.changes.push({ id, author: args.author ?? a.id, reason, base: current.hash, proposed: normalVerifiers(args.proposed), changed, state: 'open', filedAt: at, decidedAt: null })
-  return ok({ change: id })
+  const c: ChangeRec = { id, author: args.author ?? a.id, reason, base: current.hash, proposed: normalVerifiers(args.proposed), changed, state: 'open', filedAt: at, decidedAt: null }
+  m.changes.push(c)
+  // Before a baseline measures anything, the verifier's fix can't flatter a result, so it needs no review. The climbing agent's own request still does
+  if (c.author !== a.id && !baselineJob(m)) {
+    give(m, { ...c.proposed, author: current.author, frozenAt: at }, at)
+    Object.assign(c, { state: 'approved', decidedAt: at, note: 'Approved automatically, since nothing was measured on these verifiers yet.', appliedTo: [] })
+    advance(w, a, at, config)
+  }
+  return ok({ change: id, state: c.state })
 }
 
 export function postAttempt(
@@ -555,6 +575,8 @@ export function stepDone(w: World, at: Ms, args: { agent: string; module: string
   if (m.steps[n - 1]!.doneAt !== null) return ok({ job: null, done: true })
   if (!takes('stepCheck', m.state))
     return conflict('wrongState', m.state === 'passed' ? `${m.id} has passed, so its remaining steps are skipped and it takes no step checks.` : `${m.id} is ${m.state}, so it takes no step checks.${stuckNext(m)}`)
+  const from = verifiersOf(m)!.from
+  if (from) return conflict('verifiersMissing', `${m.id} runs on ${from}'s verifiers until the verifier writes its own, so its steps have no tests yet. Keep making attempts meanwhile.`)
   const f = factsOf(p, m, at)
   if (f.inFlight?.kind === 'stepCheck' && f.inFlight.step === n) return ok({ job: f.inFlight.id, done: false })
   if (f.inFlight) return conflict('jobInFlight', `${m.id} already has ${JOB_NAME[f.inFlight.kind]} in flight. Plan the next attempt meanwhile, and mark the step done once the job is done.`)

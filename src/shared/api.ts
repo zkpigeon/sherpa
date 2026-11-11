@@ -94,7 +94,8 @@ export type ModuleStatus =
 export type Verifiers =
   | { kind: 'missing' }
   /** `tests` is the test count of the module's latest job, null until one has run. */
-  | { kind: 'frozen'; hash: string; tests: number | null; author: string; hardware: string; openChanges: number }
+  /** `from`: the module the set was borrowed from, until the verifier writes this one its own. */
+  | { kind: 'frozen'; hash: string; tests: number | null; author: string; hardware: string; openChanges: number; from?: ModuleId }
 
 export type FlagKind = 'touchedVerifier' | 'rewroteVerifier' | 'fewerTests' | 'lessWork' | 'verdictWithoutJob' | 'selfAuthoredVerifiers' | 'baselineFailed'
 

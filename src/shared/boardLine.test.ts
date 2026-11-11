@@ -112,7 +112,7 @@ test('every wait names what to do meanwhile', () => {
   const frozen = { kind: 'frozen' as const, hash: 'abc', tests: 1, author: 'verifier', hardware: 'cpu', openChanges: 0 }
   assert.match(
     boardLine(agentWith(moduleWith({ status: { state: 'pending', waitingFor: 'verifiers' }, verifiers: frozen, clock: notStarted })), now),
-    /Its baseline failed on its verifiers, so it waits for an approved change request\. Meanwhile, plan the next module/,
+    /Its baseline failed on its verifiers, so it waits for the verifier's fix\. Meanwhile, plan the next module/,
     'frozen verifiers it still waits for are ones its baseline failed on',
   )
   const verifying = { id: 'a12' as AttemptId, step: 4, commit: 'c0ffee' as Commit, note: '', job: 'running' as const, verdict: null, median: null, postedAt: iso('2026-11-03T02:20:00Z'), judgedAt: null }
