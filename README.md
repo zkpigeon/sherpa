@@ -2,7 +2,7 @@
 
 # Sherpa
 
-Sherpa keeps long-running AI coding agents on track overnight. Each agent splits its hill climb into modules and steps, submits every attempt as a commit, and keeps a one-sentence blurb current. A runner measures each attempt with frozen tests and a benchmark the agent can't change, and the server judges it. A module that fails a step, misses its target, or runs out of time becomes stuck, and the agent moves on to another approach. A module that keeps winning earns more time.
+Sherpa keeps long-running AI coding agents on track overnight. Each agent splits its hill climb into modules and steps, submits every attempt as a commit, and keeps a one-sentence blurb current. A runner measures each attempt with frozen tests and a benchmark the agent can't change, and the server judges it. A module that fails a step, misses its target, or runs out of time becomes stuck, and the agent moves on to another approach. A module that keeps winning earns more time. The agent keeps adding modules until you stop the project on the dashboard or its hours run out.
 
 ![The board: a tile per agent with its module, metric, target, and blurb](assets/dashboard-board.png)
 
@@ -21,7 +21,7 @@ Created in [T3 Code](https://t3.codes).
 
    Three failed turns on one step, a target missed after the last step, or running out of time makes the module stuck. The agent then abandons it with a sentence naming the assumption that failed.
 
-   After each module that moves the project, the runner measures the start commit against the new best. The project stays open until that shows the goal met, the hours are up, or 3 modules in a row end without a win.
+   After each module that moves the project, the runner measures the start commit against the new best. The project stays open until you stop it on the dashboard or its hours are up. Meeting the goal doesn't end it, and when every module has ended, the agent adds the next one.
 6. **A hook shows the agent its board line** before each model request, so it always knows its module, step, goal, and time left:
 
    ```
@@ -90,7 +90,7 @@ Plan the climb as a project with that as its goal, starting from commit
 
 The agent creates a project, and its modules wait for verifiers. The goal is frozen with the project, so the agent can't lower it later, and the dashboard shows it.
 
-A goal can be a value to reach, as above, or a percentage, such as "40% lower than now". Leave out the hours to let it run until it gets there or stops winning. Leave out the goal altogether, and the project ends when the modules the agent planned run out.
+A goal can be a value to reach, as above, or a percentage, such as "40% lower than now". The project stays open until you stop it on the dashboard or its hours are up. Leave out the hours, and only you can end it. A project without a goal runs the same way.
 
 ### 3. Start the verifier
 
@@ -119,6 +119,8 @@ The dashboard also flags anything that needs a look:
 - a baseline that failed
 
 An agent that finds a frozen verifier wrong files a change request. It appears on the agent's page. **Review** shows the diff, and you approve or reject it with an optional note for the agent. Until you decide, the module keeps running on the old verifiers.
+
+To end a project, open its agent and use **Stop project**. You confirm first, and can leave a note for the agent. The stop cancels the job in flight and abandons every module that hasn't ended, and the agent's next queued project opens.
 
 ![An agent's page: its board line and every module, with why each abandoned one failed](assets/dashboard-agent.png)
 

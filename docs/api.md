@@ -11,9 +11,9 @@ Rejections come back as `{"error": "<code>", "message": "<sentence>"}`: 400 for 
 | Call | What it does |
 |---|---|
 | `POST /agents/{id}/projects` | Creates a project, with an optional goal for the whole climb, or queues it while another is open |
-| `GET /agents/{id}/project` | The project in brief: its goal, its state (`open`, `measuring`, `short` of its goal, or `ended`), its latest measurement, and each module's ID, state, steps, goal, and whether its verifiers are `missing`, `frozen`, or `failed` at the baseline |
+| `GET /agents/{id}/project` | The project in brief: its goal, its state (`open`, `needsModule` once every module has ended, or `ended`), its latest measurement, and each module's ID, state, steps, goal, and whether its verifiers are `missing`, `frozen`, or `failed` at the baseline |
 | `PUT /agents/{id}/blurb` | Sets the agent's sentence |
-| `POST /agents/{id}/modules` | Adds a module right after the current one, behind any added earlier that haven't started, or last in a project short of its goal |
+| `POST /agents/{id}/modules` | Adds a module right after the current one, behind any added earlier that haven't started, or last once every module has ended |
 | `GET /agents/{id}/modules/{m}` | Reads a module whole, with its verifiers' commands and file paths |
 | `POST /agents/{id}/modules/{m}/verifiers` | Submits and freezes a module's verifiers |
 | `POST /agents/{id}/modules/{m}/verifiers/changes` | Files a change request |
@@ -39,6 +39,7 @@ Rejections come back as `{"error": "<code>", "message": "<sentence>"}`: 400 for 
 | `GET /api/agents/{id}/modules/{m}/attempts/{a}` | An attempt's runs and test results |
 | `GET /admin/changes/{change}` | A change request with each changed file before and after |
 | `POST /admin/changes/{change}` | Approves or rejects a change request: `{"approve": true, "note": "…"}` |
+| `POST /admin/agents/{id}/stop` | Stops the agent's open project: `{"project": "search-perf", "note": "…"}`, both optional. The note is one line of at most 300 characters. Naming the project makes a repeat safe once the next one has opened. 409 when the agent has no open project |
 | `PUT /admin/agents/{id}/modules/{m}/verifiers` | Replaces a module's verifiers |
 | `GET /admin/verifiers/{hash}` | A frozen verifier set's files |
 
