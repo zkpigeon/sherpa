@@ -151,8 +151,8 @@ export interface Module {
   flags: Flag[]
 }
 
-/** Why a project ended: its modules ran out, it met its goal, its hours were up, or too many modules in a row ended without a win. */
-export type ProjectEnd = 'modules' | 'goalMet' | 'budget' | 'noWins'
+/** Why a project ended: the admin stopped it, or its hours were up. */
+export type ProjectEnd = 'stopped' | 'budget'
 
 /** The project's start commit measured against the commit it has reached, in one job. */
 export type ProjectResult =
@@ -179,18 +179,18 @@ export interface Project {
   title: string
   goal: ProjectGoal | null
   /**
-   * `open` while a module hasn't ended. Once every module has, a project with
-   * a goal it hasn't met is `measuring` how far it got, or `short` of the goal
-   * and waiting for the agent to add a module, until it ends.
+   * `open` while a module hasn't ended. Once every module has, `needsModule`
+   * until the agent adds the next one. `ended` only once the admin stops it or
+   * its hours are up.
    */
-  state: 'open' | 'measuring' | 'short' | 'ended'
+  state: 'open' | 'needsModule' | 'ended'
   end: ProjectEnd | null
+  /** The admin's note on the stop. */
+  stopNote: string | null
   /** The start commit measured against the commit the project has reached. Null until a measurement is queued. */
   progress: ProjectResult | null
   /** The commit the project has reached: the next module's start, or where it ended. */
   reached: Commit | null
-  /** Modules in a row that started and ended without a win. A project with a goal stops at 3. */
-  noWinRun: number
   /** In position order. */
   modules: Module[]
   /** The module that is active, past target, or stuck, or else the next pending one. Null once every module has ended. */

@@ -273,6 +273,22 @@ test('approving one change request never undoes another', async () => {
   await s.stop()
 })
 
+test('the admin stops an agent’s open project, and a repeat changes nothing', async () => {
+  const s = await boot(join(dir, 'stop.db'))
+  await s.call('POST', '/agents/4/projects', { body: { title: 'bundle', startCommit: START, modules: [{ title: 'shaking', steps: ['Shake'], goal: { metric: 'size', unit: 'kB', direction: 'lower', targetGain: 10 } }] } })
+  const stop = { project: 'bundle', note: 'Enough for tonight.' }
+  assert.equal((await s.call('POST', '/admin/agents/4/stop', { body: stop })).status, 403)
+  const stopped = await s.call('POST', '/admin/agents/4/stop', { token: 'admin', body: stop })
+  assert.deepEqual([stopped.status, stopped.json.project], [200, 'bundle'])
+  assert.deepEqual((await s.call('POST', '/admin/agents/4/stop', { token: 'admin', body: stop })).json, stopped.json)
+  const brief = (await s.call('GET', '/agents/4/project')).json
+  assert.deepEqual([brief.state, brief.modules[0].status.reason], ['ended', 'Stopped by the admin. Enough for tonight.'])
+  assert.match((await s.call('GET', '/agents/4')).text, /^agent 4: Project: bundle ended: 1 abandoned\. The admin stopped it\. "Enough for tonight\." A new project would start from aaaaaaa\.$/m)
+  const none = await s.call('POST', '/admin/agents/9/stop', { token: 'admin', body: {} })
+  assert.deepEqual([none.status, none.json.message], [409, 'Agent 9 has no open project to stop.'])
+  await s.stop()
+})
+
 test('requests from other sites, form posts, and broken paths are refused', async () => {
   const s = await boot(join(dir, 'guards.db'))
   const basic = `Basic ${Buffer.from(`me:${TOKENS.admin}`).toString('base64')}`

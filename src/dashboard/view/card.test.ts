@@ -40,7 +40,7 @@ function agentWith(m: Module | null, over: Partial<Agent> = {}): Agent {
     id: '1' as AgentId,
     blurb: 'Skipping low-impact query terms.',
     line: '',
-    project: m ? { title: 'search-perf', goal: null, end: null, progress: null, reached: null, noWinRun: 0, state: m.status.state === 'passed' ? 'ended' : 'open', modules: [m], current: m.status.state === 'passed' ? null : m.id } : null,
+    project: m ? { title: 'search-perf', goal: null, end: null, stopNote: null, progress: null, reached: null, state: m.status.state === 'passed' ? 'needsModule' : 'open', modules: [m], current: m.status.state === 'passed' ? null : m.id } : null,
     queued: [],
     ...over,
   }
@@ -104,10 +104,11 @@ test('past target: a full green bar, how far past, the streak, and a flag as the
   assert.match(c.callout?.text ?? '', /^1 flag to review: /)
 })
 
-test('passed: the project has ended, and the card names what comes next', () => {
+test('every module ended: the project stays open, and the card says the agent owes the next module', () => {
   const c = cardView(agentWith(moduleWith({ status: { state: 'passed' }, best: 330, clock: { kind: 'stopped', startedAt: at(0), at: at(80), maxMinutes: 90, extensions: [], waits: [], waitedMinutes: 0 } }), { queued: ['index-size'] }), now)!
-  assert.deepEqual(c.corner, { text: 'Passed', tone: 'success' })
-  assert.deepEqual(c.under, { text: 'Met its target, next: index-size', chip: null })
+  assert.deepEqual(c.corner, { text: 'Needs a module', tone: 'warning' })
+  assert.deepEqual(c.under, { text: 'Met its target', chip: null })
+  assert.deepEqual(c.callout, { tone: 'warning', text: 'Every module has ended. The agent has to add the next one.' })
 })
 
 test('an agent with no project gets the small card', () => {

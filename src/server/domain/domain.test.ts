@@ -16,6 +16,7 @@ import {
   setBlurb,
   settle,
   stepDone,
+  stopProject,
   type Ticket,
 } from './commands.ts'
 import { agentOf, currentOf, factsOf, locate } from './queries.ts'
@@ -23,7 +24,7 @@ import { DEFAULTS, MINUTE, emptyWorld, type GoalSpec, type ModuleSpec, type Ms, 
 import type { RejectionCode, Result } from './result.ts'
 import { resultsTsv } from './resultsTsv.ts'
 import { LIFECYCLE, nextState } from './rules.ts'
-import { attemptDetailOf, attemptStatusOf, boardOf, boardText, changeOf, stepStatusOf } from './view.ts'
+import { agentProjectOf, attemptDetailOf, attemptStatusOf, boardOf, boardText, changeOf, stepStatusOf } from './view.ts'
 
 const T0 = Date.parse('2026-11-03T00:00:00Z')
 const at = (min: number): Ms => T0 + min * MINUTE
@@ -92,6 +93,25 @@ const step = (w: World, when: Ms, n: number, value: number) => {
   must(stepDone(w, when, { agent: 'a', module: current(w), step: n }))
   return run(w, when, value)
 }
+
+/** The runner measures the project: `from` on its start commit, `to` on the commit it has reached. */
+function measure(w: World, when: Ms, from: number, to: number) {
+  const t = must(claimJob(w, when, { runner: 'r1', labels: ['cpu'] }))!
+  assert.equal(t.kind, 'final')
+  const runs = around(t.commits[0]!, from).flatMap((x, i) => [x, around(t.commit, to)[i]!])
+  must(sendResults(w, when, { job: t.job, runner: 'r1', results: { outcome: 'done', tests: { passed: 0, total: 0 }, runs, touched: [] } }))
+  return t
+}
+
+const lineOf = (w: World, when: Ms) => boardOf(w, when).agents[0]!.line
+const projectView = (w: World, when: Ms) => boardOf(w, when).agents[0]!.project!
+
+const WITH_GOAL = (goal: Partial<NonNullable<Parameters<typeof createProject>[2]['spec']['goal']>>, modules: ModuleSpec[] = [mod('cache', ['one'])]) => ({
+  title: 'search',
+  startCommit: START,
+  goal: { metric: 'p95 latency', unit: 'ms', direction: 'lower' as const, ...goal },
+  modules,
+})
 
 test('the lifecycle table moves only the states DESIGN.md allows', () => {
   assert.equal(nextState('baselineMeasured', 'pending'), 'active')
@@ -164,6 +184,8 @@ test('a module starts once its verifiers freeze and its baseline lands, then pas
   assert.equal(boardOf(w, at(10)).agents[0]!.project!.current, 'm2')
 
   must(freezeVerifiers(w, at(11), { agent: 'a', module: 'm2', author: 'verifier', verifiers: verifiers(1, 'h2') }))
+  // The project measures how far it has come in the background, first in line
+  measure(w, at(12), 100, 89)
   const next = run(w, at(12), 89)
   assert.deepEqual(next.commits, [commit('a2')], 'the next module starts from the passed module’s head commit')
 })
@@ -242,6 +264,7 @@ test('abandoning a module with a win takes a follow-up, and a retry aims lower a
   assert.equal(viewOf(w, 'm3', at(10)).retryOf, 'm1')
 
   must(freezeVerifiers(w, at(11), { agent: 'a', module: 'm3', author: 'verifier', verifiers: verifiers(2, 'h3') }))
+  measure(w, at(12), 100, 95)
   assert.deepEqual(run(w, at(12), 95).commits, [commit('a1')], 'the follow-up starts from the best commit')
   attempt(w, at(15), 'b1', 92)
   rejects(
@@ -446,23 +469,36 @@ test('a failed baseline flags the module, and approved verifiers measure it agai
   assert.deepEqual(v.kind === 'frozen' && [v.hash, v.author, v.tests], ['h3', 'admin', 10])
 })
 
-test('a project sent while one is open waits in the queue and opens when the first ends', () => {
-  const w = started([mod('cache', ['only'])])
+test('the admin stops a project: what hasn’t ended is abandoned, a win keeps its commit, and the next queued project opens', () => {
+  const w = started([mod('cache', ['one', 'two']), mod('index', ['only'])])
   const next = { title: 'index-size', startCommit: commit('index'), modules: [mod('compression', ['only'])] }
   assert.deepEqual(must(createProject(w, at(2), { agent: 'a', spec: next })), { state: 'queued', position: 1 })
   assert.deepEqual(must(createProject(w, at(2), { agent: 'a', spec: next })), { state: 'queued', position: 1 })
   rejects(w, at(2), (x) => createProject(x, at(2), { agent: 'a', spec: { ...next, startCommit: commit('other') } }), 'titleTaken')
-  assert.deepEqual(boardOf(w, at(2)).agents[0]!.queued, ['index-size'])
+  attempt(w, at(5), 'a1', 95)
+  must(postAttempt(w, at(6), { agent: 'a', module: 'm1', attempt: 'a2', commit: commit('a2'), note: 'In flight.' }))
 
-  attempt(w, at(5), 'a1', 89)
-  const a = boardOf(w, at(5)).agents[0]!
-  assert.equal(a.project?.title, 'index-size')
+  assert.deepEqual(must(stopProject(w, at(7), { agent: 'a', project: 'search', note: 'Enough for tonight.' })), { project: 'search', stoppedAt: new Date(at(7)).toISOString() })
+  assert.equal(attemptStatusOf(w, 'a', 'm1', 'a2', at(7))!.job, 'cancelled')
+  const stopped = agentOf(w, 'a')!.past.at(-1)!
   assert.deepEqual(
-    a.project?.modules.map((m) => m.id),
-    ['m2'],
+    stopped.modules.map((m) => [m.id, m.state, m.reason]),
+    [
+      ['m1', 'abandoned', 'Stopped by the admin. Enough for tonight.'],
+      ['m2', 'abandoned', 'Stopped by the admin. Enough for tonight.'],
+    ],
   )
-  assert.deepEqual(a.queued, [])
-  rejects(w, at(6), (x) => createProject(x, at(6), { agent: 'a', spec: { title: 'search', startCommit: START, modules: [mod('again')] } }), 'titleTaken')
+  // The win stays: the project is measured up to it
+  assert.deepEqual(must(claimJob(w, at(8), { runner: 'r1', labels: ['cpu'] }))!.commits, [START, commit('a1')])
+  const a = boardOf(w, at(8)).agents[0]!
+  assert.deepEqual([a.project!.title, a.project!.state, a.queued], ['index-size', 'open', []])
+
+  // Naming the project makes a repeat safe after the next one has opened
+  const before = structuredClone(w)
+  must(stopProject(w, at(9), { agent: 'a', project: 'search', note: 'Again.' }))
+  assert.deepEqual(w, before)
+  rejects(w, at(9), (x) => stopProject(x, at(9), { agent: 'b' }), 'noOpenProject')
+  rejects(w, at(9), (x) => createProject(x, at(9), { agent: 'a', spec: { title: 'search', startCommit: START, modules: [mod('again')] } }), 'titleTaken')
 })
 
 test('a new module goes right after the current one, and a repeat returns it', () => {
@@ -584,6 +620,7 @@ test('results must have the asked-for runs on each commit, with positive values'
 test('repeating a project after it ended returns the first answer', () => {
   const w = started([mod('cache', ['only'])])
   attempt(w, at(5), 'a1', 89)
+  must(stopProject(w, at(6), { agent: 'a' }))
   const spec = { title: 'search', startCommit: START, modules: [mod('cache', ['only'])] }
   assert.deepEqual(must(createProject(w, at(6), { agent: 'a', spec })), { state: 'ended', modules: ['m1'] })
 })
@@ -668,23 +705,24 @@ test('a decision carries a note, and an approval can also reach modules that hav
   assert.deepEqual(changeOf(w, 'a', 'm1', change)!.note, 'Good catch.')
 })
 
-test('an ended project measures its start against its end in one job, and a passed module hands over its best commit', () => {
+test('once every module has ended, the project waits for the next one, which starts where the project got to', () => {
   const w = started([mod('cache', ['one', 'two']), mod('index', ['only'])])
   attempt(w, at(5), 'a1', 85)
   // a flat attempt moves the head, but the module hands the next one its best commit
   attempt(w, at(6), 'a2', 85.5)
   assert.equal(viewOf(w, 'm1', at(6)).status.state, 'passed')
   must(freezeVerifiers(w, at(7), { agent: 'a', module: 'm2', author: 'verifier', verifiers: verifiers(1, 'h2') }))
+  assert.deepEqual(measure(w, at(8), 100, 85).commits, [START, commit('a1')])
   assert.deepEqual(run(w, at(8), 85).commits, [commit('a1')])
   attempt(w, at(10), 'b1', 75)
-  const ended = boardOf(w, at(10)).agents[0]!
-  assert.deepEqual(ended.project!.progress, { state: 'measuring' })
-  const final = must(claimJob(w, at(11), { runner: 'r1', labels: ['cpu'] }))!
-  assert.deepEqual([final.kind, final.tests, final.commits], ['final', [], [START, commit('b1')]])
-  const runs = around(START, 100).flatMap((x, i) => [x, around(commit('b1'), 76)[i]!])
-  must(sendResults(w, at(12), { job: final.job, runner: 'r1', results: { outcome: 'done', tests: { passed: 0, total: 0 }, runs, touched: [] } }))
-  const line = boardOf(w, at(12)).agents[0]!.line
-  assert.equal(line, `agent a: Project: search ended: 2 passed. p95 latency 100 -> 76 ms, 24% lower over the project. To keep climbing, create a new project from ${commit('b1').slice(0, 7)}.`)
+  assert.deepEqual([projectView(w, at(10)).state, projectView(w, at(10)).progress], ['needsModule', { state: 'measuring' }])
+  assert.equal(lineOf(w, at(10)), `agent a: Project: search, every module has ended. Add the next module to keep climbing from ${commit('b1').slice(0, 7)}.`)
+  // The measurement never holds the agent back
+  assert.deepEqual(must(addModule(w, at(11), { agent: 'a', spec: mod('scoring', ['only']) })), { module: 'm3', position: 3 })
+  must(freezeVerifiers(w, at(11), { agent: 'a', module: 'm3', author: 'verifier', verifiers: verifiers(1, 'h3') }))
+  assert.deepEqual(measure(w, at(12), 100, 76).commits, [START, commit('b1')])
+  assert.deepEqual(run(w, at(12), 76).commits, [commit('b1')])
+  assert.equal(projectView(w, at(12)).state, 'open')
 })
 
 test('a module’s verifiers can ask for more runs per commit', () => {
@@ -715,7 +753,9 @@ test('results.tsv has a line for every attempt and every abandoned module, oldes
   attempt(w, at(15), 'a3', 110)
   attempt(w, at(20), 'a4', 85)
   must(abandon(w, at(21), { agent: 'a', module: 'm2', reason: 'The index was never the bottleneck.' }))
-  assert.equal(run(w, at(21), 85).kind, 'final', 'the ended project measures its start against its end first')
+  assert.equal(run(w, at(21), 85).kind, 'final', 'the project measures its start against where it got')
+  // Only a stop ends a project, and then the queued one opens
+  must(stopProject(w, at(21), { agent: 'a', project: 'search' }))
   must(freezeVerifiers(w, at(22), { agent: 'a', module: 'm3', author: 'verifier', verifiers: verifiers(1, 'h3') }))
   run(w, at(23), 50)
   must(postAttempt(w, at(24), { agent: 'a', module: 'm3', attempt: 'b1', commit: commit('b1'), note: 'Pool small objects.' }))
@@ -736,25 +776,6 @@ test('results.tsv has a line for every attempt and every abandoned module, oldes
 
 // A project with a goal for its whole climb
 
-const WITH_GOAL = (goal: Partial<NonNullable<Parameters<typeof createProject>[2]['spec']['goal']>>, modules: ModuleSpec[] = [mod('cache', ['one'])]) => ({
-  title: 'search',
-  startCommit: START,
-  goal: { metric: 'p95 latency', unit: 'ms', direction: 'lower' as const, ...goal },
-  modules,
-})
-
-/** The runner measures the project: `from` on its start commit, `to` on the commit it has reached. */
-function measure(w: World, when: Ms, from: number, to: number) {
-  const t = must(claimJob(w, when, { runner: 'r1', labels: ['cpu'] }))!
-  assert.equal(t.kind, 'final')
-  const runs = around(t.commits[0]!, from).flatMap((x, i) => [x, around(t.commit, to)[i]!])
-  must(sendResults(w, when, { job: t.job, runner: 'r1', results: { outcome: 'done', tests: { passed: 0, total: 0 }, runs, touched: [] } }))
-  return t
-}
-
-const lineOf = (w: World, when: Ms) => boardOf(w, when).agents[0]!.line
-const projectView = (w: World, when: Ms) => boardOf(w, when).agents[0]!.project!
-
 test('a project goal is checked, and every module in the project measures its metric', () => {
   const w = emptyWorld()
   rejects(w, at(0), (x) => createProject(x, at(0), { agent: 'a', spec: WITH_GOAL({ target: 70, targetGain: 30 }) }), 'badSpec')
@@ -769,70 +790,27 @@ test('a project goal is checked, and every module in the project measures its me
   assert.deepEqual(projectView(w, at(0)).goal, { metric: 'p95 latency', unit: 'ms', direction: 'lower', target: null, targetGain: 60, hours: null, budgetEndsAt: null })
 })
 
-test('a project with a goal measures how far it got after each module, and stays open until a module gets it there', () => {
+test('meeting the project goal keeps the project open, and the agent keeps climbing past it', () => {
   const w = emptyWorld()
-  must(createProject(w, at(0), { agent: 'a', spec: WITH_GOAL({ target: 70 }) }))
+  must(createProject(w, at(0), { agent: 'a', spec: WITH_GOAL({ target: 90 }) }))
   must(freezeVerifiers(w, at(0), { agent: 'a', module: 'm1', author: 'verifier', verifiers: verifiers(1) }))
   run(w, at(1), 100)
-  assert.match(lineOf(w, at(2)), /Project goal: p95 latency 100 -> 70 ms\. Last planned module\. The project stays open until it meets its goal, so plan the next one\./)
-  const won = attempt(w, at(5), 'a1', 88)
-  assert.equal(moduleOf(w, 'm1').state, 'passed')
-  assert.equal(won.kind, 'attempt')
-  assert.equal(attemptStatusOf(w, 'a', 'm1', 'a1', at(5))!.lastModule, false, 'the goal holds the project open')
-  assert.equal(projectView(w, at(5)).state, 'measuring')
-  assert.equal(lineOf(w, at(5)), 'agent a: Project: search, every module has ended. Measuring how far it got toward its goal: p95 latency 100 -> 70 ms.')
-  // Another project waits behind it, since it hasn't ended
-  assert.deepEqual(must(createProject(w, at(5), { agent: 'a', spec: { title: 'next', startCommit: START, modules: [mod('later', ['one'])] } })), { state: 'queued', position: 1 })
-
-  assert.deepEqual(measure(w, at(6), 100, 88).commits, [START, commit('a1')])
-  assert.equal(projectView(w, at(6)).state, 'short')
-  assert.equal(lineOf(w, at(6)), `agent a: Project: search, short of its goal: p95 latency 100 -> 70 ms, now 88 ms. Add a module to keep climbing from ${commit('a1').slice(0, 7)}.`)
-
-  // A module added to a project short of its goal goes last, and starts where the project got to
-  assert.deepEqual(must(addModule(w, at(7), { agent: 'a', spec: mod('index', ['only']) })), { module: 'm2', position: 2 })
-  must(freezeVerifiers(w, at(7), { agent: 'a', module: 'm2', author: 'verifier', verifiers: verifiers(1, 'h2') }))
-  assert.deepEqual(run(w, at(8), 88).commits, [commit('a1')])
-  assert.match(lineOf(w, at(8)), /Project goal: p95 latency 100 -> 70 ms, now 88 ms\./)
-  attempt(w, at(10), 'b1', 68)
-  measure(w, at(11), 100, 68)
-  const a = agentOf(w, 'a')!
-  assert.equal(a.project!.title, 'next', 'the goal met, the project ended and the queued one opened')
-  const ended = a.past.at(-1)!
-  assert.equal(ended.title, 'search')
-  a.project = ended
-  assert.equal(projectView(w, at(11)).end, 'goalMet')
+  assert.match(lineOf(w, at(2)), /Project goal: p95 latency 100 -> 90 ms\. Last module in the project\. 89 min left\.$/)
+  attempt(w, at(5), 'a1', 88)
+  assert.equal(attemptStatusOf(w, 'a', 'm1', 'a1', at(5))!.lastModule, true)
+  measure(w, at(6), 100, 88)
+  assert.deepEqual([projectView(w, at(6)).state, agentProjectOf(agentOf(w, 'a')!, at(6))!.state], ['needsModule', 'needsModule'])
   assert.equal(
-    lineOf(w, at(11)),
-    `agent a: Project: search ended: 2 passed. p95 latency 100 -> 68 ms, 32% lower over the project. It met its goal of 70 ms or lower. To keep climbing, create a new project from ${commit('b1').slice(0, 7)}.`,
+    lineOf(w, at(6)),
+    `agent a: Project: search, every module has ended. Add the next module to keep climbing from ${commit('a1').slice(0, 7)}. Project goal met: p95 latency 100 -> 90 ms, now 88 ms. Keep climbing past it.`,
   )
+  // A queued project waits, since this one hasn't ended
+  assert.deepEqual(must(createProject(w, at(6), { agent: 'a', spec: { title: 'next', startCommit: START, modules: [mod('later', ['one'])] } })), { state: 'queued', position: 1 })
+  assert.deepEqual(must(addModule(w, at(7), { agent: 'a', spec: mod('index', ['only']) })), { module: 'm2', position: 2 })
+  assert.equal(projectView(w, at(7)).state, 'open')
 })
 
-test('a project short of its goal stops after 3 modules in a row end without a win', () => {
-  const w = emptyWorld()
-  must(createProject(w, at(0), { agent: 'a', spec: WITH_GOAL({ targetGain: 50 }) }))
-  const tryOne = (id: string, when: number, title?: string) => {
-    if (title) must(addModule(w, at(when), { agent: 'a', spec: mod(title, ['one']) }))
-    must(freezeVerifiers(w, at(when), { agent: 'a', module: id, author: 'verifier', verifiers: verifiers(1, `h-${id}`) }))
-    run(w, at(when + 1), 100)
-    attempt(w, at(when + 2), `${id}x`, 99.5)
-  }
-  tryOne('m1', 0)
-  must(abandon(w, at(3), { agent: 'a', module: 'm1', reason: 'Caching misses the slow queries.' }))
-  // No win means nothing to measure: the project is short of its goal right away
-  assert.equal(projectView(w, at(3)).state, 'short')
-  assert.equal(lineOf(w, at(3)), `agent a: Project: search, short of its goal: p95 latency 100 -> 50 ms, 50% lower. Add a module to keep climbing from ${START.slice(0, 7)}.`)
-  tryOne('m2', 4, 'index')
-  must(abandon(w, at(7), { agent: 'a', module: 'm2', reason: 'The index was never the bottleneck.' }))
-  assert.match(lineOf(w, at(7)), /2 modules in a row ended without a win, so if the next one ends without a win too, the project ends short of its goal\.$/)
-  tryOne('m3', 8, 'parser')
-  assert.match(lineOf(w, at(10)), /Last planned module, after 2 in a row without a win\. If it ends without one too, the project ends short of its goal, so add the next one before then\./)
-  must(abandon(w, at(11), { agent: 'a', module: 'm3', reason: 'Parsing is a rounding error.' }))
-  assert.deepEqual([projectView(w, at(11)).state, projectView(w, at(11)).end], ['ended', 'noWins'])
-  assert.match(lineOf(w, at(11)), /^agent a: Project: search ended: 3 abandoned\. It fell short of its goal of 50% lower than the start: 3 modules in a row ended without a win\./)
-  rejects(w, at(12), (x) => addModule(x, at(12), { agent: 'a', spec: mod('more', ['one']) }), 'noOpenProject')
-})
-
-test('once a project’s hours are up, no module starts, and the one running finishes', () => {
+test('once a project’s hours are up, no module starts, the one running finishes, and the project ends', () => {
   const w = emptyWorld()
   must(createProject(w, at(0), { agent: 'a', spec: WITH_GOAL({ target: 10, hours: 1 }, [mod('cache', ['one', 'two']), mod('index', ['only'])]) }))
   must(freezeVerifiers(w, at(0), { agent: 'a', module: 'm1', author: 'verifier', verifiers: verifiers(2) }))
@@ -849,7 +827,11 @@ test('once a project’s hours are up, no module starts, and the one running fin
   assert.deepEqual([moduleOf(w, 'm2').state, moduleOf(w, 'm2').reason], ['abandoned', "The project's 1-hour budget ran out before m2 started."])
   assert.deepEqual([projectView(w, at(80)).state, projectView(w, at(80)).end], ['ended', 'budget'])
   measure(w, at(81), 100, 85)
-  assert.match(lineOf(w, at(81)), /^agent a: Project: search ended: 1 passed, 1 abandoned\. p95 latency 100 -> 85 ms, 15% lower over the project\. It fell short of its goal of 10 ms or lower: its 1 hour ran out\./)
+  assert.equal(
+    lineOf(w, at(81)),
+    `agent a: Project: search ended: 1 passed, 1 abandoned. p95 latency 100 -> 85 ms, 15% lower over the project. It fell short of its goal of 10 ms or lower. Its 1 hour ran out. A new project would start from ${commit('a1').slice(0, 7)}.`,
+  )
+  rejects(w, at(82), (x) => stopProject(x, at(82), { agent: 'a' }), 'noOpenProject')
 })
 
 test('a measurement the project has moved past before a runner took it is dropped', () => {
@@ -867,5 +849,5 @@ test('a measurement the project has moved past before a runner took it is droppe
   assert.equal(stale.state, 'cancelled')
   const fresh = moduleOf(w, 'm2').jobs.find((j) => j.kind === 'final')!
   assert.deepEqual([fresh.state, fresh.commit, fresh.bestCommit], ['queued', commit('b1'), START])
-  assert.equal(projectView(w, at(4)).state, 'measuring')
+  assert.equal(projectView(w, at(4)).progress?.state, 'measuring')
 })

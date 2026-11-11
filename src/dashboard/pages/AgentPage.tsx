@@ -4,6 +4,7 @@ import { ModuleList } from '../components/ModuleList.tsx'
 import { ModulePanel } from '../components/ModulePanel.tsx'
 import { PageHead } from '../components/PageHead.tsx'
 import { ProjectGoal } from '../components/ProjectGoal.tsx'
+import { StopProject } from '../components/StopProject.tsx'
 import { useBoard, useNow } from '../data/hooks.tsx'
 import { plural } from '../view/format.ts'
 import { currentModule } from '../view/module.ts'
@@ -11,9 +12,8 @@ import { NotFound } from './NotFound.tsx'
 import './agent.css'
 
 const ENDED = {
-  ended: 'Every module in the project has ended.',
-  measuring: 'Every module has ended. The runner is measuring how far the project got toward its goal.',
-  short: 'Every module has ended short of the project goal. The agent has to add a module to keep climbing.',
+  needsModule: 'Every module has ended. The agent has to add the next module to keep climbing.',
+  ended: 'The project has ended.',
 }
 
 export function AgentPage({ id }: { id: AgentId }) {
@@ -55,8 +55,9 @@ export function AgentPage({ id }: { id: AgentId }) {
             <ModuleList agent={agent} />
           </section>
         )}
-        {m ? <ModulePanel agent={agent} m={m} now={now} /> : p && <p className="empty">{ENDED[p.state === 'open' ? 'ended' : p.state]}</p>}
+        {m ? <ModulePanel agent={agent} m={m} now={now} /> : p && p.state !== 'open' && <p className="empty">{ENDED[p.state]}</p>}
         <ChangeRequests agent={agent} />
+        <StopProject agent={agent} />
       </div>
     </>
   )

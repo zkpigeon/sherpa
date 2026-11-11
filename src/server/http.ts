@@ -417,6 +417,18 @@ const ROUTES: Route[] = [
     },
   ],
   [
+    'POST',
+    P('/admin/agents/:id/stop'),
+    ['admin'],
+    async (s, { params: [agent], body }) => {
+      const b = object(await body())
+      if (b.note !== undefined && typeof b.note !== 'string') throw new HttpError(400, 'badSpec', 'note must be text.')
+      if (b.project !== undefined && typeof b.project !== 'string') throw new HttpError(400, 'badSpec', 'project must be the title of the project to stop.')
+      const args = { agent: agent!, ...(b.project ? { project: b.project as string } : {}), ...(b.note ? { note: b.note as string } : {}) }
+      return reply(s.write('stopProject', args, (w, at, config) => cmd.stopProject(w, at, args, config)))
+    },
+  ],
+  [
     'PUT',
     P('/admin/agents/:id/modules/:m/verifiers'),
     ['admin'],
