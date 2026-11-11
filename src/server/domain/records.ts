@@ -15,8 +15,7 @@ export type ModuleState = 'pending' | 'active' | 'pastTarget' | 'stuck' | 'passe
 export type StuckCause = 'step' | 'target' | 'time'
 /**
  * `final` measures the project's start commit against the commit it has
- * reached, in one job: once the project ends, and after each module that
- * moves it when the project has a goal.
+ * reached, in one job, after each module that moves it.
  */
 export type JobKind = 'baseline' | 'attempt' | 'stepCheck' | 'final'
 
@@ -54,7 +53,7 @@ export interface ModuleSpec {
   retryOf?: string
 }
 
-/** A goal for the whole climb. Every module's goal measures the same metric, and the project stays open until it's met. */
+/** A goal for the whole climb. Every module's goal measures the same metric. */
 export interface ProjectGoalSpec {
   metric: string
   unit: string
@@ -244,6 +243,10 @@ export interface ProjectRec {
   goal?: ProjectGoal | null
   modules: ModuleRec[]
   openedAt: Ms
+  /** When the admin stopped it. Absent while it runs, and on projects stored before stops existed. */
+  stoppedAt?: Ms
+  /** The admin's note on the stop, for the agent to read. */
+  stopNote?: string
 }
 
 export interface AgentRec {

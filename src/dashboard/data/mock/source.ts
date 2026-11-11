@@ -1,6 +1,6 @@
 import type { AttemptDetail, Board } from '../../../shared/api.ts'
 import type { BoardSource } from '../source.ts'
-import { changeRecord, decideChange, settle } from '../../../server/domain/commands.ts'
+import { changeRecord, decideChange, settle, stopProject } from '../../../server/domain/commands.ts'
 import type { World } from '../../../server/domain/records.ts'
 import { attemptDetailOf, boardOf } from '../../../server/domain/view.ts'
 import { initialWorld } from './fixtures.ts'
@@ -16,6 +16,7 @@ export interface MockOptions {
 export function createMockSource({ every = 3500, now = Date.now }: MockOptions = {}): BoardSource {
   let world: World = initialWorld(now())
   let next = 0
+  let stopped = false
   let board: Board = boardOf(world, now())
   let details = new Map<string, AttemptDetail | null>()
   const listeners = new Set<() => void>()
@@ -30,11 +31,15 @@ export function createMockSource({ every = 3500, now = Date.now }: MockOptions =
 
   const tick = () => {
     const at = now()
-    const event = TIMELINE[next]
-    world = structuredClone(world)
-    if (event) {
-      event.run(world, at)
-      next++
+    const event = TIMELINE[next++]
+    const draft = structuredClone(world)
+    try {
+      event?.run(draft, at)
+      world = draft
+    } catch (e) {
+      // Once you stop a project, the script's later events for its agent have nowhere to land
+      if (!stopped) throw e
+      world = structuredClone(world)
     }
     publish(at)
   }
@@ -68,6 +73,15 @@ export function createMockSource({ every = 3500, now = Date.now }: MockOptions =
       world = structuredClone(world)
       const r = decideChange(world, at, { change, approve, ...(note ? { note } : {}) }, MOCK_CONFIG)
       if (!r.ok) return r.rejection.message
+      publish(at)
+      return null
+    },
+    async stop(agent, project, note) {
+      const at = now()
+      world = structuredClone(world)
+      const r = stopProject(world, at, { agent, project, ...(note ? { note } : {}) }, MOCK_CONFIG)
+      if (!r.ok) return r.rejection.message
+      stopped = true
       publish(at)
       return null
     },

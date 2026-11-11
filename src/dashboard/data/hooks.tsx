@@ -29,6 +29,12 @@ export function useDecide() {
   return source.decide ? source.decide.bind(source) : null
 }
 
+/** The source's stop-project action, or null when it has none. */
+export function useStop() {
+  const source = useSource()
+  return source.stop ? source.stop.bind(source) : null
+}
+
 /** The source's change-request diff, or null when it has none. */
 export function useReview() {
   const source = useSource()

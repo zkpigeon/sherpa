@@ -14,6 +14,10 @@ function goal(m: Module) {
   return `Goal: ${g.metric} ${round(g.baseline)} -> ${round(g.target)} ${g.unit}, ${change}.${best}`
 }
 
+// Every wait names something useful to do meanwhile, so the agent never stops to ask
+const WHILE_VERIFIERS = "Meanwhile, plan the next module, or work ahead on this one's first step."
+const NOTHING_HEAVY = 'Run nothing heavy, since it skews the runner.'
+
 function status(m: Module, now: Date) {
   const s = m.status
   // A module whose turn it is knows the commit it starts from, which is where the agent's branch should be
@@ -21,27 +25,25 @@ function status(m: Module, now: Date) {
   if (s.state === 'pending') {
     if (s.waitingFor === 'turn') return 'Not started.'
     // Frozen verifiers it still waits for are ones its baseline failed on
-    if (s.waitingFor === 'verifiers' && m.verifiers.kind === 'frozen') return `Its baseline failed on its verifiers, so it waits for an approved change request.${from}`
-    return `Waiting for its ${s.waitingFor}.${from}`
+    if (s.waitingFor === 'verifiers' && m.verifiers.kind === 'frozen') return `Its baseline failed on its verifiers, so it waits for an approved change request.${from} ${WHILE_VERIFIERS}`
+    if (s.waitingFor === 'verifiers') return `Waiting for its verifiers.${from} ${WHILE_VERIFIERS}`
+    return `Waiting for its baseline.${from} Meanwhile, read the module and plan its first attempt. ${NOTHING_HEAVY}`
   }
-  if (s.state === 'stuck') return 'Stuck, waiting for an abandon reason.'
+  if (s.state === 'stuck') return 'Stuck. Abandon it with a reason now, then move on.'
   if (m.clock.kind === 'grace') return 'Time is up, 1 attempt left.'
   const left = minutesLeft(m.clock, now)
-  return left === null ? '' : `${left} min left.`
+  const job = m.attempts.find((a) => a.job === 'queued' || a.job === 'running')
+  const busy = job ? `${job.id} is with the runner. Meanwhile, plan the next attempt. ${NOTHING_HEAVY}` : ''
+  return [left === null ? '' : `${left} min left.`, busy].filter(Boolean).join(' ')
 }
 
 const ended = (m: Module) => m.status.state === 'passed' || m.status.state === 'abandoned'
 
-/**
- * Once the current module ends, the project ends, so the agent hears it while
- * it can still add one. A goal not yet met holds the project open instead,
- * unless the module would be the 3rd in a row to end without a win.
- */
-function last(p: Project, m: Module) {
+/** While every other module has ended, the agent hears it in time to plan the next one. */
+function last(p: Project, m: Module, now: Date) {
   if (!p.modules.every((x) => x === m || ended(x))) return ''
-  if (!p.goal || metGoal(p)) return 'Last module in the project.'
-  if (p.noWinRun === 2) return 'Last planned module, after 2 in a row without a win. If it ends without one too, the project ends short of its goal, so add the next one before then.'
-  return 'Last planned module. The project stays open until it meets its goal, so plan the next one.'
+  const spent = p.goal?.budgetEndsAt && minutesBetween(now, p.goal.budgetEndsAt) <= 0
+  return spent ? 'Last module in the project.' : 'Last module in the project. Plan the next one before this one ends.'
 }
 
 /** The goal as a target: `25 s or lower`, or `40% lower than the start`. */
@@ -63,12 +65,10 @@ function hoursLeft(p: Project, now: Date): string {
   return `${h < 10 ? Number(h.toFixed(1)) : Math.round(h)} h left in the project.`
 }
 
-/** In a project short of its goal, one more module without a win ends it. */
-const strikes = (p: Project) => (p.noWinRun === 2 ? '2 modules in a row ended without a win, so if the next one ends without a win too, the project ends short of its goal.' : '')
-
 function projectGoal(p: Project, now: Date): string {
   if (!p.goal) return ''
-  return [`Project goal${metGoal(p) ? ' met' : ''}: ${goalNow(p)}.`, hoursLeft(p, now)].filter(Boolean).join(' ')
+  const met = metGoal(p)
+  return [`Project goal${met ? ' met' : ''}: ${goalNow(p)}.`, met ? 'Keep climbing past it.' : '', hoursLeft(p, now)].filter(Boolean).join(' ')
 }
 
 const opposite = (d: 'lower' | 'higher') => (d === 'lower' ? 'higher' : 'lower')
@@ -93,22 +93,24 @@ function outcome(p: Project): string {
 
 const hours = (n: number) => `${n} ${n === 1 ? 'hour' : 'hours'}`
 
-const ENDS = {
-  goalMet: (g: ProjectGoal) => ` It met its goal of ${aim(g)}.`,
-  budget: (g: ProjectGoal) => ` It fell short of its goal of ${aim(g)}: its ${hours(g.hours!)} ran out.`,
-  noWins: (g: ProjectGoal) => ` It fell short of its goal of ${aim(g)}: 3 modules in a row ended without a win.`,
+/** Why the project ended, with the admin's note quoted as its own sentence. Both are stops a human chose. */
+function why(p: Project): string {
+  if (p.end !== 'stopped') return p.goal?.hours ? ` Its ${hours(p.goal.hours)} ran out.` : ''
+  const note = p.stopNote && (/[.!?]$/.test(p.stopNote) ? p.stopNote : `${p.stopNote}.`)
+  return note ? ` The admin stopped it. "${note}"` : ' The admin stopped it.'
 }
 
-/** What an ended project achieved, and the commit a new project would start from. */
+/** What an ended project achieved, why it ended, and the commit a new project would start from. */
 function summary(agentId: string, p: Project): string {
   const passed = p.modules.filter((m) => m.status.state === 'passed').length
   const abandoned = p.modules.length - passed
   const counts = [passed && `${passed} passed`, abandoned && `${abandoned} abandoned`].filter(Boolean).join(', ')
-  const overall = outcome(p) + (p.goal && p.end && p.end !== 'modules' ? ENDS[p.end](p.goal) : '')
+  // Judged only on a measurement, never on an estimate
+  const goal = p.goal && p.progress?.state === 'done' ? ` It ${metGoal(p) ? 'met' : 'fell short of'} its goal of ${aim(p.goal)}.` : ''
   // Every ended module leaves its best commit, so the last one's is where the project ended
   const commit = p.modules.at(-1)?.bestCommit
-  const next = commit ? ` To keep climbing, create a new project from ${commit.slice(0, 7)}.` : ''
-  return `agent ${agentId}: Project: ${p.title} ended: ${counts}.${overall}${next}`
+  const next = commit ? ` A new project would start from ${commit.slice(0, 7)}.` : ''
+  return `agent ${agentId}: Project: ${p.title} ended: ${counts}.${outcome(p)}${goal}${why(p)}${next}`
 }
 
 /** The plain-text line the hook shows the agent and GET /board returns. */
@@ -117,14 +119,13 @@ export function boardLine(agent: Agent, now: Date): string {
   if (!p) return `agent ${agent.id}: no open project`
   const m = p.modules.find((x) => x.id === p.current)
   const head = `agent ${agent.id}: Project: ${p.title}`
-  if (p.state === 'measuring') return `${head}, every module has ended. Measuring how far it got toward its goal: ${goalNow(p)}.`
-  if (p.state === 'short') {
+  if (p.state === 'needsModule') {
     const from = p.reached ? ` from ${p.reached.slice(0, 7)}` : ''
-    return [`${head}, short of its goal: ${goalNow(p)}. Add a module to keep climbing${from}.`, strikes(p), hoursLeft(p, now)].filter(Boolean).join(' ')
+    return [`${head}, every module has ended. Add the next module to keep climbing${from}.`, projectGoal(p, now)].filter(Boolean).join(' ')
   }
   if (!m) return summary(agent.id, p)
   const done = m.steps.filter((s) => s.done).length
   const streak = m.streak >= 2 ? `${m.streak} wins in a row.` : ''
-  const blurb = [agent.blurb, goal(m), streak, projectGoal(p, now), last(p, m), status(m, now)].filter(Boolean).join(' ')
+  const blurb = [agent.blurb, goal(m), streak, projectGoal(p, now), last(p, m, now), status(m, now)].filter(Boolean).join(' ')
   return `${head}, Module (${m.position} / ${p.modules.length}): ${m.title}, Progress: ${done} / ${m.steps.length}, Blurb: ${blurb}`
 }

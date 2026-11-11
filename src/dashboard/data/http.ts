@@ -60,6 +60,17 @@ export async function createHttpSource({ every = 3000, base = '' }: HttpOptions 
     notify()
   }
 
+  /** An admin action. Resolves to the server's reason when it refuses, or null once the board shows the change. */
+  async function post(path: string, body: object): Promise<string | null> {
+    const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    if (res.ok) {
+      await poll()
+      return null
+    }
+    const reply = (await res.json().catch(() => null)) as { message?: string } | null
+    return reply?.message ?? `sherpa-server answered ${res.status}`
+  }
+
   return {
     current: () => board,
     subscribe(listener) {
@@ -78,15 +89,8 @@ export async function createHttpSource({ every = 3000, base = '' }: HttpOptions 
       return details.get(k) ?? null
     },
     review: (change: ChangeId) => getJson<ChangeReview>(`${base}/admin/changes/${change}`).catch(() => null),
-    async decide(change: ChangeId, approve: boolean, note?: string) {
-      const res = await fetch(`${base}/admin/changes/${change}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ approve, ...(note ? { note } : {}) }) })
-      if (res.ok) {
-        await poll()
-        return null
-      }
-      const body = (await res.json().catch(() => null)) as { message?: string } | null
-      return body?.message ?? `sherpa-server answered ${res.status}`
-    },
+    decide: (change: ChangeId, approve: boolean, note?: string) => post(`/admin/changes/${change}`, { approve, ...(note ? { note } : {}) }),
+    stop: (agent: AgentId, project: string, note?: string) => post(`/admin/agents/${agent}/stop`, { project, ...(note ? { note } : {}) }),
     async signOut() {
       await fetch(`${base}/signout`, { method: 'POST' }).catch(() => {})
       location.reload()

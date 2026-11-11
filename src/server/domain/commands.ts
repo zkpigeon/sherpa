@@ -20,7 +20,6 @@ import {
   locate,
   measureHost,
   measured,
-  modulesEnded,
   progressJob,
   projectEnded,
   reachedCommit,
@@ -57,6 +56,7 @@ import {
   MAX_RUNNER_ERRORS,
   goalMismatch,
   goalOf,
+  ended,
   isAgentId,
   isCommit,
   isText,
@@ -75,7 +75,7 @@ import {
 function move(m: ModuleRec, event: ModuleEvent, at: Ms) {
   const next = nextState(event, m.state)
   if (!next) throw new Error(`${event} can't move ${m.id} from ${m.state}`)
-  m.cause = CAUSE[event] ?? (event === 'abandoned' ? m.cause : null)
+  m.cause = CAUSE[event] ?? (next === 'abandoned' ? m.cause : null)
   m.state = next
   if (next !== 'pending' && !live(next)) m.stoppedAt ??= at
 }
@@ -243,12 +243,10 @@ function advance(w: World, a: AgentRec, at: Ms, config: Config) {
 /**
  * Measures the project's start commit against the commit it has reached, in
  * one job on the verifiers of the last module that got there, so the result
- * isn't pieced together from modules measured in different jobs. A project
- * with a goal does this each time a module moves it, to know whether it's
- * there yet. One without a goal does it once, when it ends.
+ * isn't pieced together from modules measured in different jobs. It runs each
+ * time a module moves the project, and nothing waits for it.
  */
 function measureProject(w: World, a: AgentRec, p: ProjectRec, at: Ms) {
-  if (!p.goal && !modulesEnded(p)) return
   const reached = reachedCommit(p)
   // A measurement still waiting for a commit the project has moved past would measure nothing anyone reads
   for (const m of p.modules) for (const j of m.jobs) if (j.kind === 'final' && j.state === 'queued' && j.commit !== reached) cancel(j, at)
@@ -385,6 +383,11 @@ function apply(p: ProjectRec, m: ModuleRec, j: JobRec, at: Ms, fresh: boolean) {
 
 // Agent calls
 
+const JOB_NAME = { baseline: 'a baseline job', attempt: 'an attempt', stepCheck: 'a step check', final: 'a project measurement' } satisfies Record<JobKind, string>
+
+/** A stuck module only waits for the agent, so a refusal says what to do. */
+const stuckNext = (m: ModuleRec) => (m.state === 'stuck' ? ' Abandon it with a reason now, then move on.' : '')
+
 function find(w: World, agent: string, module: string): Result<Located> {
   const found = locate(w, agent, module)
   if (found) return ok(found)
@@ -519,9 +522,9 @@ export function postAttempt(
   const commit = args.commit.toLowerCase() as Commit
   const posted = m.attempts.find((x) => x.id === args.attempt)
   if (posted) return posted.commit === commit ? ok({ attempt: posted.id, job: posted.job }) : conflict('attemptIdTaken', `Attempt ${posted.id} was posted with commit ${posted.commit}.`)
-  if (!takes('attempt', m.state)) return conflict('wrongState', `${m.id} is ${m.state}, so it takes no attempts.`)
+  if (!takes('attempt', m.state)) return conflict('wrongState', `${m.id} is ${m.state}, so it takes no attempts.${stuckNext(m)}`)
   const f = factsOf(p, m, at)
-  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has a ${f.inFlight.kind} job in flight. Wait for it to finish.`)
+  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has ${JOB_NAME[f.inFlight.kind]} in flight. Plan the next attempt meanwhile, and post it once the job is done.`)
   if (f.deadline !== null && at >= f.deadline && f.last) return conflict('timeIsUp', `Time is up for ${m.id}, and its last attempt was ${f.last.id}.`)
   if (commit === f.best) return conflict('alreadyBest', `${commit} is already ${m.id}'s best commit.`)
 
@@ -544,10 +547,10 @@ export function stepDone(w: World, at: Ms, args: { agent: string; module: string
   if (!Number.isInteger(n) || n < 1 || n > m.steps.length) return invalid('badSpec', `${m.id} has steps 1 to ${m.steps.length}.`)
   if (m.steps[n - 1]!.doneAt !== null) return ok({ job: null, done: true })
   if (!takes('stepCheck', m.state))
-    return conflict('wrongState', m.state === 'passed' ? `${m.id} has passed, so its remaining steps are skipped and it takes no step checks.` : `${m.id} is ${m.state}, so it takes no step checks.`)
+    return conflict('wrongState', m.state === 'passed' ? `${m.id} has passed, so its remaining steps are skipped and it takes no step checks.` : `${m.id} is ${m.state}, so it takes no step checks.${stuckNext(m)}`)
   const f = factsOf(p, m, at)
   if (f.inFlight?.kind === 'stepCheck' && f.inFlight.step === n) return ok({ job: f.inFlight.id, done: false })
-  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has a ${f.inFlight.kind} job in flight. Wait for it to finish.`)
+  if (f.inFlight) return conflict('jobInFlight', `${m.id} already has ${JOB_NAME[f.inFlight.kind]} in flight. Plan the next attempt meanwhile, and mark the step done once the job is done.`)
   if (n !== f.step + 1) return conflict('wrongStep', `Step ${f.step + 1} is ${m.id}'s current step.`)
   if (f.deadline !== null && at >= f.deadline) return conflict('timeIsUp', `Time is up for ${m.id}, so it takes no step checks.`)
 
@@ -602,6 +605,35 @@ export function abandon(
 }
 
 // Admin calls
+
+/**
+ * Ends an agent's open project for good: cancels the jobs in flight, abandons
+ * every module that hasn't ended, measures where the project got, and opens
+ * the next queued project. `project` names the one to stop, so a repeat after
+ * the next one has opened stops nothing.
+ */
+export function stopProject(w: World, at: Ms, args: { agent: string; project?: string; note?: string }, config: Config = DEFAULTS): Result<{ project: string; stoppedAt: Iso }> {
+  settle(w, at, config)
+  if (args.project !== undefined && !isText(args.project, 80)) return invalid('badSpec', 'project is the title of the project to stop.')
+  if (args.note !== undefined && args.note !== '' && !isText(args.note, 300)) return invalid('badSpec', 'A stop note is one line of at most 300 characters.')
+  const a = agentOf(w, args.agent)
+  const title = args.project?.trim()
+  const p = !a ? null : title === undefined ? a.project : ([a.project, ...a.past].find((x) => x?.title === title) ?? null)
+  if (p?.stoppedAt !== undefined) return ok({ project: p.title, stoppedAt: iso(p.stoppedAt) })
+  if (!a || !p || p !== a.project || projectEnded(p, at)) return conflict('noOpenProject', `Agent ${args.agent} has no open project${title ? ` titled "${title}"` : ''} to stop.`)
+  const note = args.note?.trim() || null
+  for (const m of p.modules) {
+    if (ended(m.state)) continue
+    const flight = inFlight(m)
+    if (flight) cancel(flight, at)
+    m.reason = note ? `Stopped by the admin. ${note}` : 'Stopped by the admin.'
+    move(m, 'stopped', at)
+  }
+  p.stoppedAt = at
+  if (note) p.stopNote = note
+  advance(w, a, at, config)
+  return ok({ project: p.title, stoppedAt: iso(at) })
+}
 
 function findChange(w: World, id: string) {
   for (const a of w.agents)

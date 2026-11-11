@@ -1,12 +1,12 @@
 # Sherpa design
 
-Sherpa keeps long-running agents on track. Each agent splits its hill climb into modules and steps, submits every attempt as a commit, and keeps a short blurb current. A runner measures each attempt with tests and a benchmark the agent can't change, and the server judges the result. An active module that fails a step, finishes its steps without reaching its target, or runs out of time becomes stuck, and the agent moves on to a different task or implementation. A module that keeps winning earns more time and can run past its target.
+Sherpa keeps long-running agents on track. Each agent splits its hill climb into modules and steps, submits every attempt as a commit, and keeps a short blurb current. A runner measures each attempt with tests and a benchmark the agent can't change, and the server judges the result. An active module that fails a step, finishes its steps without reaching its target, or runs out of time becomes stuck, and the agent moves on to a different task or implementation. A module that keeps winning earns more time and can run past its target. A project runs until you stop it on the dashboard or its hours run out, so the agent keeps adding modules.
 
 ## Terms
 
 | Term | Meaning |
 |---|---|
-| Project | An agent's plan for one hill climb, as an ordered list of modules. |
+| Project | An agent's hill climb, as an ordered list of modules. It runs until you stop it or its hours run out. |
 | Module | One approach to one goal, with its own steps, goal, verifiers, and clock. |
 | Step | One piece of work inside a module, also called a submodule. |
 | Current module | The module the agent is on: the one that is active, past target, or stuck, or else the next pending module. |
@@ -27,20 +27,28 @@ Every board line has this format:
 agent {id}: Project: {title}, Module ({position} / {total}): {title}, Progress: {done steps} / {total steps}, Blurb: {blurb}
 ```
 
-The agent writes one sentence about what it is working on. The server appends the rest of the blurb from its own records: the goal and its metric, the best value once a win has moved it, the streak when there is one, the project goal and how far the project has come toward it, a warning when the current module is the project's last, and the time left. So the blurb always matches what the server has measured. Once the project ends, the line sums it up instead: how many modules passed and were abandoned, the metric's change over the project, and the commit a new project would start from. A final job measures that change: it runs the benchmark on the project's start commit and its final commit, alternating, on the last module's verifiers. Until it lands, the line gives an estimate that chains each module's gain. Values under 100 show three significant figures, so small numbers still show progress.
+The agent writes one sentence about what it is working on. The server appends the rest of the blurb from its own records: the goal and its metric, the best value once a win has moved it, the streak when there is one, the project goal and how far the project has come toward it, a warning when the current module is the project's last, and the time left. So the blurb always matches what the server has measured. Every wait on the line names something useful to do meanwhile, so the agent never stops to ask what to do next:
+
+- While a module waits for verifiers, the agent plans the next module, or works ahead on this module's first step.
+- While a baseline or an attempt is with the runner, the agent plans the next attempt and runs nothing heavy that skews the runner.
+- A stuck module tells the agent to abandon it with a reason now, then move on.
+- On the last module, the line says to plan the next one before this one ends.
+- Once every module has ended, the line says to add the next module, and names the commit it starts from.
+
+Once the project ends, the line sums it up instead: how many modules passed and were abandoned, the metric's change over the project, why it ended, and the commit a new project would start from. A final job measures that change: it runs the benchmark on the project's start commit and the commit it has reached, alternating, on the last module's verifiers. Until it lands, the line gives an estimate that chains each module's gain. Values under 100 show three significant figures, so small numbers still show progress.
 
 ```
 agent 1: Project: search-perf, Module (2 / 5): query cache, Progress: 3 / 7, Blurb: Caching parsed queries. Goal: p95 latency 371 -> 334 ms, 10% lower. Best so far 352 ms. 2 wins in a row. 38 min left.
 ```
 
-`sherpa-server` also serves the dashboard, a web page with one tile per agent. A tile shows everything in the board line, plus a time-left bar, the next queued project, the module's verifiers, open verifier change requests, and flags. Your actions, such as approving a verifier change, happen on the dashboard.
+`sherpa-server` also serves the dashboard, a web page with one tile per agent. A tile shows everything in the board line, plus a time-left bar, the next queued project, the module's verifiers, open verifier change requests, and flags. Your actions, such as approving a verifier change or stopping a project, happen on the dashboard.
 
 ## Data model
 
 | Record | Fields |
 |---|---|
 | Agent | `id`, open project, queued projects, blurb sentence |
-| Project | `title` (unique per agent), start commit, git remote (optional), ordered modules, `maxMinutes` (optional) |
+| Project | `title` (unique per agent), start commit, git remote (optional), ordered modules, `maxMinutes` (optional), goal (optional), when it opened, when the admin stopped it and the admin's note |
 | Module | `id` (never changes), position, `title` (unique in its project), ordered steps, goal, verifiers, state, start commit, head commit, best commit, attempts, `startedAt`, `maxMinutes` (optional), stuck cause (`step`, `target`, or `time`), `abandonReason`, `retryOf` (the module it retries, if any) |
 | Step | `title`, `done`, failed turns |
 | Goal | `metric`, `direction` (`lower` or `higher`), `targetGain` (percent of the baseline), `minGain` (percent of the best commit's median), `ambitious` |
@@ -55,15 +63,23 @@ The server derives the baseline, the best value, the streak, the extensions, and
 
 An agent starts by creating a project with its start commit and its modules, each with steps and a goal. Steps build on each other in order, and a failed step makes its module stuck, so separate ideas for the same goal go in separate modules. The server can't check this, so the agent's instructions state it with an example: "try an LRU cache" and "try an LFU cache" are two modules, not two steps.
 
-Each agent has one open project at a time. A project sent while another is open joins the agent's queue and starts when the open project ends. A project without a goal ends when every module in it has passed or been abandoned.
+Each agent has one open project at a time. A project sent while another is open joins the agent's queue and starts when the open project ends.
+
+### A project runs until a human stops it
+
+An agent left alone overnight should never stall waiting for a person. So a project never ends on its own while its agent can still work.
+
+- **What ends it.** You stop it on the dashboard, or its hours run out. Both are stops a human chose. Nothing else ends a project: not a met goal, not modules that end without a win, not running out of planned modules.
+- **Every module ended.** The project waits for the next module, with or without a goal. The board line tells the agent to add one, and it goes last and starts from the reached commit.
+- **Stopping.** The stop cancels any job in flight, and abandons every module that hasn't ended with the reason "Stopped by the admin.", plus your note if you left one. A module abandoned with a win keeps it, so the project's reached commit includes it. The server records when the project stopped, measures how far it got, and opens the next queued project. Stopping it again changes nothing.
 
 ### A project can climb toward a set goal
 
 You give the agent a goal for the whole climb in its prompt, such as "p95 latency under 250 ms within 8 hours", and the agent puts it in the project when it creates it. The goal names a metric, a unit, and a direction, and either a `target` value or a `targetGain` percentage over the start commit, with optional `hours`. It's frozen with the project, so the agent can't lower it later, and the dashboard shows it. Every module in the project measures the goal's metric, so their gains add up to it. Module targets stay within the 20% cap, and only the project goal can go past it, since modules chain.
 
-- **Measured, not estimated.** Each time a module ends and moves the commit the project has reached, a final job runs the benchmark on the start commit and that commit, alternating, on the verifiers of the last module that got there. A measurement still queued for a commit the project has moved past is dropped. The board line shows the goal on every line, with where the project started and where it is now.
-- **The goal holds the project open.** When every module has ended, the project waits for the measurement. If it shows the goal unmet, the project is short of its goal: the board line tells the agent to add a module, which goes last and starts from the reached commit.
-- **What ends it.** A measurement that shows the goal met. Its hours, counted from when the project opened: after them, no module starts, the one running finishes on its own clock, and pending modules are abandoned. Or 3 modules in a row that started and ended without a win, since an agent churning on an unreachable goal is better stopped and flagged. A planned module always gets its turn, so the last two rules only stop a project whose planned modules have run out.
+- **Measured, not estimated.** Each time a module ends and moves the commit the project has reached, a final job runs the benchmark on the start commit and that commit, alternating, on the verifiers of the last module that got there. This happens for every project, with a goal or without. A measurement still queued for a commit the project has moved past is dropped. Nothing waits for it, so the agent can add a module at any time. The board line shows the goal on every line, with where the project started and where it is now.
+- **A met goal doesn't end it.** The line says the goal is met, and the agent keeps climbing past it.
+- **Hours.** They count from when the project opened. After them, no module starts, the one running finishes on its own clock, and pending modules are abandoned. Then the project ends.
 
 New work that belongs to the open project becomes a module instead of a project. So does another approach to a goal. A new module comes with its own steps and goal, goes right after the current module, behind any modules added earlier that haven't started, and needs verifiers before it can start. The answer gives its position.
 
@@ -80,7 +96,8 @@ A module is `pending`, `active`, `pastTarget`, `stuck`, `passed`, or `abandoned`
 5. A stuck module becomes abandoned when the agent records `abandonReason`. The reason is one sentence that names the assumption the attempts shared. The agent can also abandon a pending or active module early. Abandoning cancels any job in flight, and a result that arrives later changes nothing.
 6. A module abandoned with a win keeps it. The abandon call then has to propose a follow-up module that starts from the abandoned module's best commit. The follow-up either retries the same steps with a smaller `targetGain`, or adds new steps built on that commit. A module can be retried only once, so a retry can only be built on. The follow-up goes right after the current module, starts with every step undone, and needs its own verifiers and baseline.
 7. A module abandoned without a win has nothing worth keeping, so its commits are dropped.
-8. Each module starts from the commit the module before it left behind: the best commit of a module that passed or was abandoned with a win, or the start commit of a module abandoned without one. A passed module's flat attempts after its last win stay behind, since the steps they prepared won't run, and a module abandoned without a win drops its flat commits too. The first module starts from the project's start commit. The abandon call and the waiting module's board line name the commit, so the agent can reset its branch to it.
+8. Stopping the project abandons every module that hasn't ended, past target included. It takes no follow-up, and a module with a win keeps it.
+9. Each module starts from the commit the module before it left behind: the best commit of a module that passed or was abandoned with a win, or the start commit of a module abandoned without one. A passed module's flat attempts after its last win stay behind, since the steps they prepared won't run, and a module abandoned without a win drops its flat commits too. The first module starts from the project's start commit. The abandon call and the waiting module's board line name the commit, so the agent can reset its branch to it.
 
 ## Verifiers come first
 
@@ -192,6 +209,7 @@ Agent calls carry the agent ID in the path and the agent token. Runner calls car
 | `GET /api/board`, `GET /api/agents/{id}/modules/{m}/attempts/{a}` | admin | The dashboard's data: the board and an attempt's runs |
 | `GET /admin/changes/{change}` | admin | Returns a change request with each changed file before and after, for review |
 | `POST /admin/changes/{change}` | admin | Approves or rejects a change request, with an optional note for the agent |
+| `POST /admin/agents/{id}/stop` | admin | Stops the agent's open project, with an optional note for the agent. Cancels its job in flight, abandons what hasn't ended, and opens the next queued project |
 | `PUT /admin/agents/{id}/modules/{m}/verifiers` | admin | Replaces a module's verifiers |
 | `GET /admin/verifiers/{hash}` | admin | Returns a frozen verifier set's files, for reviewing a change request |
 | `POST /jobs/claim` | runner | Claims the next job whose hardware label the runner has |

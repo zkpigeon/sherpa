@@ -69,8 +69,8 @@ const runnerFor = (w: World, agent: string, module: string) => (verifiersOf(loca
 export function startBaselines(w: World, at: Ms) {
   settle(w, at, MOCK_CONFIG)
   for (const a of w.agents) {
-    // A project's measurement is queued before the next module's baseline, so the runner takes it first
-    for (const host of a.project?.modules ?? [])
+    // A project's measurement is queued before the next module's baseline, so the runner takes it first. A stopped project still gets one
+    for (const host of [a.project, ...a.past].flatMap((p) => p?.modules ?? []))
       if (host.jobs.some((j) => j.kind === 'final' && j.state === 'queued')) finish(w, claim(w, runnerFor(w, a.id, host.id), { agent: a.id, module: host.id, kind: 'final' }, at), { median: 0 }, {}, at)
     const m = a.project && firstInLine(a.project)
     if (m?.jobs.some((j) => j.kind === 'baseline' && j.state === 'queued')) claim(w, runnerFor(w, a.id, m.id), { agent: a.id, module: m.id, kind: 'baseline' }, at)

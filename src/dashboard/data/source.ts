@@ -13,6 +13,8 @@ export interface BoardSource {
   attempt(agent: AgentId, module: ModuleId, attempt: AttemptId): AttemptDetail | null
   /** Approves or rejects a verifier change request, with an optional note for the agent. Resolves to the reason it failed, or null. */
   decide?(change: ChangeId, approve: boolean, note?: string): Promise<string | null>
+  /** Stops the agent's open project, named by its title so a repeat stops nothing new. Resolves to the reason it failed, or null. */
+  stop?(agent: AgentId, project: string, note?: string): Promise<string | null>
   /** A change request's diff, for review. */
   review?(change: ChangeId): Promise<ChangeReview | null>
   /** Forgets the dashboard's sign-in. */

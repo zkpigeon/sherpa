@@ -21,6 +21,8 @@ export const LIFECYCLE = {
   outOfTime: { active: 'stuck', pastTarget: 'passed' },
   /** The agent recorded an abandon reason. */
   abandoned: { pending: 'abandoned', active: 'abandoned', stuck: 'abandoned' },
+  /** The admin stopped the project. */
+  stopped: { pending: 'abandoned', active: 'abandoned', pastTarget: 'abandoned', stuck: 'abandoned' },
 } as const satisfies Record<string, Partial<Record<ModuleState, ModuleState>>>
 
 export type ModuleEvent = keyof typeof LIFECYCLE
@@ -55,8 +57,6 @@ export const GRACE_SHARE = 0.1
 export const MAX_RUNNER_ERRORS = 3
 /** How long past its time limit a runner can hold a job before the server takes it back. */
 export const HOLD_GRACE_MINUTES = 30
-/** Modules in a row that ended without a win before a project stops holding out for its goal. */
-export const NO_WIN_LIMIT = 3
 export const MAX_PROJECT_HOURS = 168
 
 // Spec checks. Each returns the problem as a sentence, or null. They check

@@ -128,7 +128,7 @@ test('agents, runners and the admin drive a module through HTTP, and the data su
   assert.deepEqual(await s.call('GET', '/agents/9').then((r) => [r.status, r.text]), [200, 'agent 9: no open project\n'])
   const line = await s.call('GET', '/agents/1')
   assert.equal(line.type, 'text/plain; charset=utf-8')
-  assert.equal(line.text, 'agent 1: Project: search-perf, Module (1 / 1): query cache, Progress: 0 / 1, Blurb: Caching parsed queries. Goal: p95 latency 100 -> 90 ms, 10% lower. Last module in the project. 90 min left.\n')
+  assert.equal(line.text, 'agent 1: Project: search-perf, Module (1 / 1): query cache, Progress: 0 / 1, Blurb: Caching parsed queries. Goal: p95 latency 100 -> 90 ms, 10% lower. Last module in the project. Plan the next one before this one ends. 90 min left.\n')
 
   tick(5)
   const posted = await s.call('POST', '/agents/1/modules/m1/attempts', { body: { attemptId: 'a1', commit: NEXT, note: 'Cache parsed query trees.' } })
@@ -270,6 +270,22 @@ test('approving one change request never undoes another', async () => {
   assert.equal(m.changes[1]!.author, 'verifier')
   const now = (await s.call('GET', `/admin/verifiers/${frozen!.hash}`, { token: 'admin' })).json
   assert.deepEqual(now, { 'bench/latency.js': 'warm()', 'test/regression.test.js': 'edge()' })
+  await s.stop()
+})
+
+test('the admin stops an agent’s open project, and a repeat changes nothing', async () => {
+  const s = await boot(join(dir, 'stop.db'))
+  await s.call('POST', '/agents/4/projects', { body: { title: 'bundle', startCommit: START, modules: [{ title: 'shaking', steps: ['Shake'], goal: { metric: 'size', unit: 'kB', direction: 'lower', targetGain: 10 } }] } })
+  const stop = { project: 'bundle', note: 'Enough for tonight.' }
+  assert.equal((await s.call('POST', '/admin/agents/4/stop', { body: stop })).status, 403)
+  const stopped = await s.call('POST', '/admin/agents/4/stop', { token: 'admin', body: stop })
+  assert.deepEqual([stopped.status, stopped.json.project], [200, 'bundle'])
+  assert.deepEqual((await s.call('POST', '/admin/agents/4/stop', { token: 'admin', body: stop })).json, stopped.json)
+  const brief = (await s.call('GET', '/agents/4/project')).json
+  assert.deepEqual([brief.state, brief.modules[0].status.reason], ['ended', 'Stopped by the admin. Enough for tonight.'])
+  assert.match((await s.call('GET', '/agents/4')).text, /^agent 4: Project: bundle ended: 1 abandoned\. The admin stopped it\. "Enough for tonight\." A new project would start from aaaaaaa\.$/m)
+  const none = await s.call('POST', '/admin/agents/9/stop', { token: 'admin', body: {} })
+  assert.deepEqual([none.status, none.json.message], [409, 'Agent 9 has no open project to stop.'])
   await s.stop()
 })
 

@@ -2,6 +2,17 @@
 
 These are the instructions for an agent whose hill climb Sherpa keeps on track, and for the verifier agent that writes its tests and benchmark. `scripts/connect.sh` copies them into the agent's checkout as `.sherpa/guide.md`.
 
+## Keep going until a human stops you
+
+Your project runs until a human stops it on the dashboard, or until the hours they set run out. Nothing else ends it. A met goal doesn't, and neither do modules that end without a win.
+
+- Never pause to ask whether to continue, or which approach to try next. Decide, act, and say what you chose in your blurb.
+- When a module ends, add the next one. When every module has ended, the board line asks for the next one. Add it right away.
+- When ideas run thin, read the module's attempts and abandon reasons again. Combine two near-misses. Try a bolder approach. Go back to a module that came close.
+- While you wait on a runner or the verifier, do what the board line names, such as planning the next attempt or the next module.
+
+## Your settings
+
 Every call carries the agent token. Load your settings with `. .sherpa/env` in the checkout. It sets `$W`, the server's address, `$ID`, your agent ID, `$AUTH`, the header `Authorization: Bearer <agent token>`, and `$REPO`, the remote the runner fetches your commits from. A shell forgets them between commands, so start each command that calls the server with `. .sherpa/env &&`. Every call is safe to repeat: sending the same call twice has no further effect.
 
 ## Your board line
@@ -14,9 +25,11 @@ agent 1: Project: search-perf, Module (2 / 5): query cache, Progress: 1 / 3, Blu
 
 The server writes everything after your sentence: the goal, the best value once you have a win, the streak, and the time left. Read the line to know which module and step you're on, and how long you have. `GET $W/agents/$ID` returns the same line, or `no open project` before you create one.
 
-- **"Last module in the project."** The project ends as soon as this module does. If you have more ideas, add them as modules now.
-- **"Project goal: p95 latency 415 -> 250 ms, now 331 ms."** The project has a goal for the whole climb, and this is how far it has come. With a goal it hasn't met, the last module's warning says "Last planned module" instead, because the project stays open until it gets there.
-- **When the project ends,** a final job measures its start commit against its final commit, and the line sums it up and names the commit to start from, such as `Project: search-perf ended: 4 passed, 1 abandoned. p95 latency 415 -> 331 ms, 20% lower over the project. To keep climbing, create a new project from 9be1c04.` Expand it with `git rev-parse 9be1c04` for the new project's `startCommit`.
+- **"Last module in the project. Plan the next one before this one ends."** Every other module has ended. Add the next module now, so it can get its verifiers while this one runs.
+- **"Project: search-perf, every module has ended. Add the next module to keep climbing from 9be1c04."** The project is waiting for you. Add a module, and it starts from that commit.
+- **"a7 is with the runner."** Plan the next attempt while you wait. Each wait on the line names something to do meanwhile.
+- **"Project goal: p95 latency 415 -> 250 ms, now 331 ms."** The project has a goal for the whole climb, and this is how far it has come. Once it says "Project goal met", keep climbing past it.
+- **When the project ends,** the line sums it up and names the commit a new project would start from, such as `Project: search-perf ended: 4 passed, 1 abandoned. p95 latency 415 -> 331 ms, 20% lower over the project. The admin stopped it. A new project would start from 9be1c04.` If the admin left a note, the line quotes it after the stop. Expand the commit with `git rev-parse 9be1c04` for a new project's `startCommit`.
 
 ## Plan the climb as a project
 
@@ -39,7 +52,7 @@ curl -sS -X POST "$W/agents/$ID/projects" -H "$AUTH" -H 'content-type: applicati
 }'
 ```
 
-`repo` is your `$REPO`, and `startCommit` a full hash from `git rev-parse HEAD`, pushed as below. The answer lists the module IDs, such as `m1` and `m2`. Calls name a module by its ID, which never changes. While a project is open, a new project waits in your queue and starts when the open one ends. New work for the open project goes in as a module, right after the current one and behind any you added earlier that haven't started. The answer gives its position:
+`repo` is your `$REPO`, and `startCommit` a full hash from `git rev-parse HEAD`, pushed as below. The answer lists the module IDs, such as `m1` and `m2`. Calls name a module by its ID, which never changes. While a project is open, a new project waits in your queue and starts only when the open one ends, because a human stopped it or its hours ran out. So new work goes in as a module, right after the current one and behind any you added earlier that haven't started. The answer gives its position:
 
 ```sh
 curl -sS -X POST "$W/agents/$ID/modules" -H "$AUTH" -H 'content-type: application/json' \
@@ -52,9 +65,9 @@ A module can set `maxMinutes`, and so can a project for its modules. The default
 
 When your instructions give a goal for the whole climb, such as "p95 latency under 250 ms" or "40% lower", put it in the project as `goal`, as in the example above. Give `target` for a value to reach, or `targetGain` for a percentage better than the start commit, and `hours` when the instructions give a time limit. The goal is frozen with the project. Every module's goal measures the same metric, unit, and direction, and each module's `targetGain` stays a step toward it, at most 20% unless the module is ambitious.
 
-- After each module that moves the project, a runner measures the start commit against the commit the project has reached, and the board line shows it.
-- The project doesn't end when its planned modules run out short of the goal. The line then says `Project: search-perf, short of its goal: p95 latency 415 -> 250 ms, now 331 ms. Add a module to keep climbing from 9be1c04.` Add a module, and it starts from that commit.
-- It ends when a measurement shows the goal met, when its hours are up, or when 3 modules in a row end without a win. Once the hours are up, no new module starts, and the one running finishes on its own clock.
+- After each module that moves the project, a runner measures the start commit against the commit the project has reached, and the board line shows it. You never wait for this measurement.
+- Meeting the goal doesn't end the project. Keep adding modules and climbing past it.
+- Once its hours are up, no new module starts. The one running finishes on its own clock, and modules that haven't started are abandoned.
 
 ## Keep your blurb current
 
@@ -91,7 +104,7 @@ Poll for the verdict. The answer gives the runner's numbers: `median`, `bestMedi
 curl -sS "$W/agents/$ID/modules/m1/attempts/a7" -H "$AUTH"
 ```
 
-Only one job runs per module at a time, so wait for a verdict before posting the next attempt. Reposting a commit returns its stored result; it won't be measured again. An `attemptId` is unique within its module. The answer's `lastModule` is true when the project ends with this module, so add any module you still plan before its last win.
+Only one job runs per module at a time, so plan the next attempt while you wait for a verdict. Reposting a commit returns its stored result; it won't be measured again. An `attemptId` is unique within its module. The answer's `lastModule` is true when every other module has ended, so add the next module before this one ends.
 
 The test count grows as you go: an attempt runs the regression tests plus the tests of every step that's done, so finishing a step adds that step's tests to later attempts.
 

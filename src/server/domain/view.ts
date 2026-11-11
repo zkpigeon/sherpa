@@ -4,7 +4,8 @@
 import type { Agent, AgentId, Attempt, AttemptDetail, AttemptId, Board, ChangeId, Clock, Commit, Goal, Iso, JobId, Module, ModuleId, ModuleStatus, Project, Verdict } from '../../shared/api.ts'
 import { judge } from './judge.ts'
 import { boardLine } from '../../shared/boardLine.ts'
-import { budgetEndsAt, currentOf, factsOf, failedTurns, firstInLine, goalMet, locate, measured, noWinRun, progressOf, reachedCommit, standingOf, verifiersOf, type Facts } from './queries.ts'
+import { budgetEndsAt, currentOf, factsOf, failedTurns, firstInLine, locate, measured, progressOf, reachedCommit, standingOf, verifiersOf, type Facts } from './queries.ts'
+import { ended } from './rules.ts'
 import { MINUTE, iso, type AgentRec, type AttemptRec, type JobRec, type ModuleRec, type Ms, type ProjectRec, type VerifierSet, type World } from './records.ts'
 
 const jobOf = (m: ModuleRec, x: AttemptRec) => m.jobs.find((j) => j.id === x.job)!
@@ -103,9 +104,9 @@ function projectOf(p: ProjectRec, now: Ms): Project {
     goal: g && { ...g, budgetEndsAt: budget === null ? null : iso(budget) },
     state: standing.state,
     end: standing.state === 'ended' ? standing.end : null,
+    stopNote: p.stopNote ?? null,
     progress: progressOf(p),
     reached: reachedCommit(p),
-    noWinRun: noWinRun(p),
     modules: p.modules.map((m) => moduleOf(p, m, now)),
     current: currentOf(p)?.id ?? null,
   }
@@ -194,13 +195,13 @@ export interface AttemptStatus {
   failedTurns: number
   streak: number
   module: ModuleStatus
-  /** The project ends when this module does. */
+  /** Every other module has ended, so the project waits for the next one once this one ends. */
   lastModule: boolean
   line: string
 }
 
-/** Whether the project ends with this module: every other one has ended, and no goal holds the project open. */
-const isLast = (p: ProjectRec, m: ModuleRec) => p.modules.every((x) => x === m || x.state === 'passed' || x.state === 'abandoned') && (!p.goal || goalMet(p))
+/** Whether every other module has ended, so the agent should add the next one before this one ends. */
+const isLast = (p: ProjectRec, m: ModuleRec) => p.modules.every((x) => x === m || ended(x.state))
 
 const pct = (n: number) => `${Math.abs(n) < 10 ? Math.abs(n).toFixed(1) : Math.round(Math.abs(n))}%`
 const pText = (p: number) => (p < 0.001 ? 'p < 0.001' : `p = ${p.toFixed(3)}`)
@@ -210,7 +211,7 @@ function why(m: ModuleRec, x: AttemptRec, j: JobRec): string {
   const state = j.state
   if (state === 'queued') return 'Queued for a runner.'
   if (state === 'running') return `Running on ${j.claims.at(-1)?.runner ?? 'a runner'}.`
-  if (state === 'cancelled') return 'Cancelled when the module was abandoned.'
+  if (state === 'cancelled') return 'Cancelled when the module was abandoned or the project stopped.'
   const r = j.results
   if (!x.judged || !r) {
     const error = j.claims.findLast((c) => c.error)?.error
@@ -290,7 +291,7 @@ export function stepStatusOf(w: World, agent: string, module: string, n: number)
   const checkWhy = (job: JobRec) => {
     if (job.state === 'queued') return 'Queued for a runner.'
     if (job.state === 'running') return `Running on ${job.claims.at(-1)?.runner ?? 'a runner'}.`
-    if (job.state === 'cancelled') return 'Cancelled when the module was abandoned.'
+    if (job.state === 'cancelled') return 'Cancelled when the module was abandoned or the project stopped.'
     const r = job.results
     if (!r) return `No result: no runner could run the check. Mark the step done again to retry.`
     if (r.outcome === 'killed') return 'The check ran past its time limit, so the step stays open.'
