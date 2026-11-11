@@ -225,7 +225,7 @@ test('symlinks in a commit can’t carry the frozen files out of the checkout', 
   }
 })
 
-test('a runner runs the clean command on both commits, and smaller code at an equal metric is simpler', async () => {
+test('a runner runs the clean command on both commits, and smaller code at a metric no worse is simpler', async () => {
   const dir = join(root, 'clean')
   mkdirSync(dir)
   const git = (...args: string[]) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim()

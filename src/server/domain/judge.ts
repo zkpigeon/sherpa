@@ -107,14 +107,13 @@ export function judge(r: JobResult, goal: { direction: Direction; minGain: numbe
   const next = median(r.next)
   const gain = gainOf(bestMedian, next, goal.direction)
   const better = betterIn(goal.direction)
-  // Short of a win and not reliably worse, a median within minGain of the best counts as equal
-  const flat = gain >= -goal.minGain && smaller(r.clean) ? 'simpler' : 'flat'
   if (gain >= 0) {
     const p = rankP(r.next, r.best, better)
-    return { verdict: gain >= goal.minGain && p < 0.05 ? 'win' : flat, median: next, bestMedian, gain, p }
+    // Short of a win, smaller code at a median no worse is simpler. A worse median never is, so trims can't add up to a slower best commit
+    return { verdict: gain >= goal.minGain && p < 0.05 ? 'win' : smaller(r.clean) ? 'simpler' : 'flat', median: next, bestMedian, gain, p }
   }
   const p = rankP(r.next, r.best, (x, y) => better(y, x))
-  return { verdict: p < 0.05 ? 'fail' : flat, median: next, bestMedian, gain, p }
+  return { verdict: p < 0.05 ? 'fail' : 'flat', median: next, bestMedian, gain, p }
 }
 
 /** A finished step holds the metric unless the rank test shows the head commit worse than the best at p below 0.05. */

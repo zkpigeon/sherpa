@@ -234,9 +234,9 @@ function why(m: ModuleRec, x: AttemptRec, j: JobRec): string {
   if (d.verdict === 'win') return `Win: ${moved} (needs ${minGain}%), ${pText(d.p)} (needs below 0.05).`
   if (d.verdict === 'fail') return `Fail: ${moved}, and the rank test shows it's reliably worse (${pText(d.p)}).`
   const sizes = r.clean && `${sizeText(r.clean.best.size)} -> ${sizeText(r.clean.next.size)} in size under the clean rules`
-  if (d.verdict === 'simpler') return `Simpler: ${moved}, which counts as equal, and ${sizes}.`
-  // Smaller code that is still flat lost more than minGain, since anything closer would be simpler
-  const clean = !r.clean ? '' : !r.clean.next.passed ? ' Not simpler: it breaks the clean rules.' : smaller(r.clean) ? ` Not simpler: ${sizes}, but its median is more than ${minGain}% worse.` : ` Not simpler: ${sizes}.`
+  if (d.verdict === 'simpler') return `Simpler: ${moved}, short of a win, and ${sizes}.`
+  // Smaller code that is still flat has a worse median, since one no worse would be simpler
+  const clean = !r.clean ? '' : !r.clean.next.passed ? ' Not simpler: it breaks the clean rules.' : smaller(r.clean) ? ` Not simpler: ${sizes}, but its median is worse.` : ` Not simpler: ${sizes}.`
   if (d.gain < 0) return `Flat: ${moved}, but not reliably worse (${pText(d.p)}).${clean}`
   const short = [d.gain < minGain && `needs ${minGain}%`, d.p >= 0.05 && `${pText(d.p)}, needs below 0.05`].filter(Boolean).join('; ')
   return `Flat: ${moved}; ${short}.${clean}`

@@ -180,7 +180,7 @@ The server sets each attempt's verdict from the runner's results.
 
 - A win passes the tests, its median beats the best commit's median by at least `minGain`, and a rank test (Mann-Whitney) separates the two sets of runs at p below 0.05.
 - A fail has failing tests, a job killed for running past its time limit, a job thrown out because a command changed a frozen file, a commit the runner can't fetch or benchmark, or runs that the rank test shows are worse than the best commit's at p below 0.05.
-- A simpler attempt keeps the metric equal and makes the code smaller under the verifiers' clean rules, as the next section sets out.
+- A simpler attempt keeps the metric no worse and makes the code smaller under the verifiers' clean rules, as the next section sets out.
 - Any other attempt is flat.
 - A win moves both the head commit and the best commit to the new commit. A simpler attempt does too. A flat attempt moves only the head commit, so work that prepares later steps is kept. A fail moves neither, and the agent goes back to the head commit.
 - An attempt meets the target when it is a win and its median reaches the target.
@@ -189,17 +189,17 @@ The server sets each attempt's verdict from the runner's results.
 - A retried post with the same `attemptId` returns the stored attempt, so a retry never counts twice.
 - Every verdict also goes into one table per agent, with the runner's numbers and the attempt's note. The table holds each abandoned module's reason too, so before each new idea the agent can read what it already tried and which assumptions failed.
 
-### Simpler code wins at an equal metric
+### Simpler code wins when the metric is no worse
 
 Code that does the same work with less is easier for the next attempt to build on, so it should become the best commit. But "simpler" needs a definition the agent can't bend, or an agent could win by deleting checks or cramming code onto fewer lines. So the verifiers define it, and they freeze it like the tests.
 
-- **The clean command.** A module's verifiers can include a `clean` command. It exits 0 when a commit follows the clean rules the verifier chose, such as the repo's linter and formatter check. It prints the code's size by the verifier's own measure as a last line, such as `{"size": 812}`. A typical measure is non-blank lines in the source files the agent edits, without tests, verifier files, generated files, or lockfiles.
-- **When an attempt is simpler.** Its tests pass. The rank test doesn't show it worse than the best commit at p below 0.05, and its median is no more than `minGain` worse than the best commit's. It passes the clean command, and its size is smaller than the best commit's from the same job. If the best commit breaks the clean rules, a new commit that follows them at no larger a size is simpler too.
+- **The clean command.** A module's verifiers can include a `clean` command. It exits 0 when a commit follows the clean rules the verifier chose, such as the repo's linter and formatter check. It prints the code's size by the verifier's own measure as a last line, such as `{"size": 812}`. A typical measure is non-blank lines in the source files the agent edits, without tests, verifier files, generated files, or lockfiles. The linter's and formatter's configs go in the frozen files too, so a commit can't loosen the rules.
+- **When an attempt is simpler.** Its tests pass, and its median is no worse than the best commit's from the same job, but short of a win. A median even slightly worse is flat, so a run of trims can't add up to a slower best commit. It passes the clean command, and its size is smaller than the best commit's from the same job. If the best commit breaks the clean rules, a new commit that follows them at no larger a size is simpler too.
 - **What it changes.** A simpler attempt moves the head commit and the best commit, so later attempts are measured against the simpler code.
 - **What it can't buy.** A simpler attempt never meets the target, never earns an extension, and neither extends nor ends a streak. Trimming code can't buy time or fake progress.
 - **What it isn't.** A simpler attempt isn't a failed turn. It doesn't pass a past-target module either, so that module keeps going.
 - **Without a clean command,** nothing changes, and such an attempt is flat.
-- The answer's sentence names both parts, such as "Simpler: 0.4% lower than the best commit, which counts as equal, and 812 -> 774 in size under the clean rules."
+- The answer's sentence names both parts, such as "Simpler: 0.4% lower than the best commit, short of a win, and 812 -> 774 in size under the clean rules."
 
 One table in the server sets what each verdict does. It says whether the verdict moves the head commit and the best commit, how it touches the streak, whether it can meet the target, and whether it is a failed turn.
 

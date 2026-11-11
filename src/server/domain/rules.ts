@@ -17,7 +17,7 @@ export const LIFECYCLE = {
   stepFailed: { active: 'stuck' },
   /** The last step's check passed. */
   lastStepDone: { active: 'stuck', pastTarget: 'passed' },
-  /** An attempt that isn't a win, once past target. */
+  /** An attempt that ends the streak, flat or fail, once past target. */
   streakEnded: { pastTarget: 'passed' },
   /** The last attempt was judged, or the grace period ended without one. */
   outOfTime: { active: 'stuck', pastTarget: 'passed' },

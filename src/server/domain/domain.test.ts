@@ -643,23 +643,22 @@ test('an attempt’s answer carries its numbers and says why it got its verdict'
   assert.equal(attemptStatusOf(w, 'a', 'm1', 'a5', at(25))!.why, 'Queued for a runner.')
 })
 
-test('an attempt at an equal metric is simpler only when it follows the frozen clean rules at a smaller size', () => {
+test('an attempt at a metric no worse is simpler only when it follows the frozen clean rules at a smaller size', () => {
   const goal = { direction: 'lower' as const, minGain: 2 }
   const best = [100, 100.2, 99.8, 100.4, 99.6]
   const passes = { passed: 10, total: 10 }
   const verdict = (next: number[], clean?: CleanResults, tests = passes) => judge({ tests, killed: false, best, next, clean }, goal).verdict
   const sized = (from: number, to: number, ok = { best: true, next: true }): CleanResults => ({ best: ok.best ? { passed: true, size: from } : { passed: false, size: from }, next: ok.next ? { passed: true, size: to } : { passed: false, size: to } })
-  // 0.4% worse with overlapping runs: the rank test can't call it worse, and it's within minGain
-  const equal = [100.4, 100.6, 100.2, 100.8, 100]
+  // 0.2% better with overlapping runs: short of a win, and no worse
+  const equal = [99.8, 100, 99.6, 100.2, 99.4]
   assert.equal(verdict(equal, sized(812, 774)), 'simpler')
   assert.equal(verdict(equal, sized(812, 812)), 'flat', 'the same size is not simpler')
   assert.equal(verdict(equal, sized(812, 774, { best: true, next: false })), 'flat', 'a commit that breaks the clean rules is not simpler')
   assert.equal(verdict(equal, sized(812, 812, { best: false, next: true })), 'simpler', 'following rules the best commit broke, at no larger a size')
   assert.equal(verdict(equal), 'flat', 'without a clean command nothing changes')
   assert.equal(verdict(equal, sized(812, 774), { passed: 9, total: 10 }), 'fail')
-  // A median 3% worse that the rank test can't separate is still flat, since it's worse by more than minGain
-  const noisy = [90, 110, 100, 95, 105]
-  assert.equal(judge({ tests: passes, killed: false, best: noisy, next: noisy.map((x) => x + 3), clean: sized(812, 700) }, goal).verdict, 'flat')
+  // A median even 0.4% worse is flat, however much smaller, or a run of trims could add up to a slower best commit
+  assert.equal(verdict([100.4, 100.6, 100.2, 100.8, 100], sized(812, 700)), 'flat')
   // A real gain is still a win, however large the code
   assert.equal(verdict([95, 95.2, 94.8, 95.4, 94.6], sized(812, 900)), 'win')
 })
@@ -676,7 +675,7 @@ test('a simpler attempt moves the best commit, but never meets the target or tou
   attempt(w, at(10), 'a2', 89.5, { clean: clean(812, 774) })
   const status = attemptStatusOf(w, 'a', 'm1', 'a2', at(10))!
   assert.equal(status.verdict, 'simpler')
-  assert.equal(status.why, 'Simpler: 1.6% lower than the best commit, which counts as equal, and 812 -> 774 in size under the clean rules.')
+  assert.equal(status.why, 'Simpler: 1.6% lower than the best commit, short of a win, and 812 -> 774 in size under the clean rules.')
   let m = viewOf(w, 'm1', at(10))
   assert.deepEqual([m.status.state, m.bestCommit, m.best, m.streak, m.steps[0]!.failedTurns], ['active', commit('a2'), 89.5, 1, 0])
   assert.deepEqual(m.clock.kind === 'running' && m.clock.extensions, [], 'no time for trimming code')
