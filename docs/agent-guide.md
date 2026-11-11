@@ -15,6 +15,7 @@ Your project runs until a human stops it on the dashboard, or until the hours th
 
 Every call carries the agent token. Load your settings with `. .sherpa/env` in the checkout. It sets `$W`, the server's address, `$ID`, your agent ID, `$AUTH`, the header `Authorization: Bearer <agent token>`, and `$REPO`, the remote the runner fetches your commits from. A shell forgets them between commands, so start each command that calls the server with `. .sherpa/env &&`. Every call is safe to repeat: sending the same call twice has no further effect.
 
+- These are the only settings you use. Never read Sherpa's own `.env` or a runner's environment, and never commit code that does.
 - You are never the verifier. Never submit verifiers or file a change request with an `author` other than your own ID. The verifier agent writes and fixes them.
 
 ## Your board line

@@ -161,7 +161,7 @@ One thing is the same in both: **the agent can never change the benchmark.** The
 | Where a commit runs | Its own bare Docker container | A plain process on the runner's machine, in the checkout |
 | Network | None | The machine's |
 | Toolchain and GPUs | Only what the verifiers' image has | Everything the machine has |
-| Runner's secrets | Out of reach | None are passed on: it sees `HOME`, `PATH`, `LANG`, and a few locale and certificate settings. But it can read the runner token, as the runner's user |
+| Runner's secrets | Out of reach | None are passed on: it sees `HOME`, `PATH`, `LANG`, and a few locale and certificate settings. But it can read every token in `.env`, the admin token included, as the runner's user |
 | Files outside the checkout | Out of reach | Readable and writable, as the runner's user |
 | Leftover processes | Killed after every command | The command's process group is killed when it ends |
 | A changed frozen file | Throws the job out | Throws the job out |
@@ -187,11 +187,11 @@ Use open when the strict sandbox costs more than it protects:
 
 ### What open limits, and what it doesn't
 
-Open catches edits to the frozen tests and benchmark. It doesn't keep the machine, or the runner's token, safe from the code under test.
+Open catches edits to the frozen tests and benchmark. It doesn't keep the machine, or Sherpa's tokens, safe from the code under test.
 
 - Code under test can read any file the runner's user can, and use the network. A read leaves no trace for the runner to check.
 - It can change files outside its checkout. A change to a frozen file is caught. A change to anything else isn't, including one to the other commit's checkout that skews the comparison.
-- It can read the runner token in `.env`, or in the runner's environment, and send results of its own. Open trusts the code not to.
+- It can read the tokens in `.env`, or the runner token in the runner's environment. With the runner token it could send results of its own, and with the admin token approve changes to its verifiers. Open trusts the code not to, and the agent guide forbids it.
 - A process that leaves its process group on purpose, such as with `setsid`, can outlive its command and slow the next run.
 - Other work on the machine shares the CPU with the benchmark, so expect noisier runs. Raise `runs` in the verifiers if gains come out flat.
 

@@ -170,7 +170,7 @@ Open is for setups where the strict sandbox costs more than it protects.
 
 - **Network.** Code under test can reach the network. A benchmark that depends on remote state can drift between runs, and code could fetch data it shouldn't use.
 - **The machine.** Code under test runs as the runner's user. It can read any file that user can, and it can change files outside the checkout, including the other commit's checkout. The check after each command catches a change to a frozen file. It doesn't catch a read, or a change to anything else.
-- **The runner's token.** The runner's user can read the runner token, in `.env` and in the runner's own environment, so code under test could send results of its own. Open trusts the code not to.
+- **The tokens.** The runner's user can read every token in `.env`, and the runner token in the runner's own environment, so code under test could send results of its own, or approve changes to its verifiers with the admin token. Open trusts the code not to, and the agent guide forbids reading them.
 - **Leftovers.** A process that leaves its process group on purpose, such as with `setsid`, can outlive its command and slow the next run.
 - **Benchmark stability.** Other work on the machine shares the CPU with the benchmark. `SHERPA_CPUSET` and `SHERPA_MEMORY` apply only to strict containers.
 
