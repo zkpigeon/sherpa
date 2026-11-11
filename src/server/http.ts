@@ -13,6 +13,7 @@ import * as cmd from './domain/commands.ts'
 import { baselineJob, locate, verifiersOf } from './domain/queries.ts'
 import type { JobResults, ModuleSpec, ProjectSpec, VerifierSpec } from './domain/records.ts'
 import type { Result } from './domain/result.ts'
+import { resultsTsv } from './domain/resultsTsv.ts'
 import { verifierProblem } from './domain/rules.ts'
 import * as view from './domain/view.ts'
 import type { Service } from './service.ts'
@@ -372,6 +373,12 @@ const ROUTES: Route[] = [
     },
   ],
   ['GET', P('/board'), ['agent', 'admin'], (s) => ({ status: 200, text: `${s.read((w, now) => view.boardText(w, now))}\n` })],
+  [
+    'GET',
+    P('/agents/:id/results\\.tsv'),
+    ['agent', 'admin'],
+    (s, { params: [agent] }) => ({ status: 200, text: s.read((w) => resultsTsv(w, agent!)), headers: { 'content-type': 'text/tab-separated-values; charset=utf-8' } }),
+  ],
 
   // The dashboard's data and actions
   ['GET', P('/api/board'), ['admin'], (s) => json(s.read((w, now) => view.boardOf(w, now)))],
@@ -538,7 +545,7 @@ export function createHandler({ service, tokens, dashboard }: HttpOptions) {
         headers['content-type'] = 'application/json; charset=utf-8'
         payload = JSON.stringify(r.json)
       } else if (r.text !== undefined) {
-        headers['content-type'] = 'text/plain; charset=utf-8'
+        headers['content-type'] ??= 'text/plain; charset=utf-8'
         payload = r.text
       }
       res.writeHead(r.status, headers).end(payload)

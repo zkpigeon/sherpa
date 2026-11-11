@@ -142,6 +142,11 @@ test('agents, runners and the admin drive a module through HTTP, and the data su
   const judged = await s.call('GET', '/agents/1/modules/m1/attempts/a1')
   assert.deepEqual([judged.json.verdict, judged.json.module.state, judged.json.median, judged.json.bestMedian], ['win', 'passed', 88, 100])
   assert.match(judged.json.why, /^Win: 12% lower than the best commit/)
+  const results = await s.call('GET', '/agents/1/results.tsv')
+  const [header, row] = results.text.split('\n')
+  assert.deepEqual([results.status, results.type], [200, 'text/tab-separated-values; charset=utf-8'])
+  assert.match(row!, /^search-perf\tm1\tquery cache\t1\ta1\tbbbbbbb\twin\t88\t100\t12\t/)
+  assert.deepEqual(await s.call('GET', '/agents/9/results.tsv').then((r) => [r.status, r.text]), [200, `${header}\n`], 'an agent the server hasn’t heard from gets the header alone')
   const step = await s.call('GET', '/agents/1/modules/m1/steps/1')
   assert.deepEqual([step.json.done, step.json.skipped, step.json.check], [false, true, null])
 

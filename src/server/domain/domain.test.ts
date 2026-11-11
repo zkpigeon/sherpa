@@ -21,6 +21,7 @@ import {
 import { agentOf, currentOf, factsOf, locate } from './queries.ts'
 import { DEFAULTS, MINUTE, emptyWorld, type GoalSpec, type ModuleSpec, type Ms, type VerifierSpec, type World } from './records.ts'
 import type { RejectionCode, Result } from './result.ts'
+import { resultsTsv } from './resultsTsv.ts'
 import { LIFECYCLE, nextState } from './rules.ts'
 import { attemptDetailOf, attemptStatusOf, boardOf, boardText, changeOf, stepStatusOf } from './view.ts'
 
@@ -703,6 +704,34 @@ test('abandoning a module says where the next one starts', () => {
   assert.deepEqual(r, { followUp: null, startsFrom: START }, 'a flat attempt is dropped with the module')
   must(freezeVerifiers(w, at(7), { agent: 'a', module: 'm2', author: 'verifier', verifiers: verifiers(1, 'h2') }))
   assert.match(boardOf(w, at(7)).agents[0]!.line, new RegExp(`Waiting for its baseline\\. It starts from ${START.slice(0, 7)}\\.$`))
+})
+
+test('results.tsv has a line for every attempt and every abandoned module, oldest project first', () => {
+  const w = started([mod('cache', ['only']), mod('index', ['only'])])
+  must(createProject(w, at(2), { agent: 'a', spec: { title: 'heap', startCommit: commit('heap'), modules: [mod('arena', ['only'])] } }))
+  attempt(w, at(5), 'a1', 95)
+  must(postAttempt(w, at(10), { agent: 'a', module: 'm1', attempt: 'a2', commit: commit('a2'), note: 'Cache\tquery plans.' }))
+  run(w, at(10), 94)
+  attempt(w, at(15), 'a3', 110)
+  attempt(w, at(20), 'a4', 85)
+  must(abandon(w, at(21), { agent: 'a', module: 'm2', reason: 'The index was never the bottleneck.' }))
+  assert.equal(run(w, at(21), 85).kind, 'final', 'the ended project measures its start against its end first')
+  must(freezeVerifiers(w, at(22), { agent: 'a', module: 'm3', author: 'verifier', verifiers: verifiers(1, 'h3') }))
+  run(w, at(23), 50)
+  must(postAttempt(w, at(24), { agent: 'a', module: 'm3', attempt: 'b1', commit: commit('b1'), note: 'Pool small objects.' }))
+
+  const [header, ...rows] = resultsTsv(w, 'a').split('\n').slice(0, -1).map((line) => line.split('\t'))
+  assert.deepEqual(header, ['project', 'module', 'module_title', 'step', 'attempt', 'commit', 'verdict', 'median', 'best_median', 'gain_pct', 'p', 'tests', 'note'])
+  const c = (id: string) => commit(id).slice(0, 7)
+  assert.deepEqual(rows, [
+    ['search', 'm1', 'cache', '1', 'a1', c('a1'), 'win', '95', '100', '5', '0.00396825', '10/10', 'Try a1.'],
+    ['search', 'm1', 'cache', '1', 'a2', c('a2'), 'flat', '94', '95', '1.05263', '0.00396825', '10/10', 'Cache query plans.'],
+    ['search', 'm1', 'cache', '1', 'a3', c('a3'), 'fail', '110', '95', '-15.7895', '0.00396825', '10/10', 'Try a3.'],
+    ['search', 'm1', 'cache', '1', 'a4', c('a4'), 'win', '85', '95', '10.5263', '0.00396825', '10/10', 'Try a4.'],
+    ['search', 'm2', 'index', '', '', '', 'abandoned', '', '', '', '', '', 'The index was never the bottleneck.'],
+    ['heap', 'm3', 'arena', '1', 'b1', c('b1'), 'pending', '', '', '', '', '', 'Pool small objects.'],
+  ])
+  assert.equal(resultsTsv(w, 'nobody'), `${header!.join('\t')}\n`, 'an agent with no attempts gets the header alone')
 })
 
 // A project with a goal for its whole climb
