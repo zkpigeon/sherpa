@@ -9,7 +9,7 @@ function goal(m: Module) {
   const g = m.goal
   const change = `${g.targetGain}% ${g.direction}`
   if (g.baseline === null || g.target === null) return `Goal: ${g.metric}, ${change}.`
-  // The best value once a win has moved it off the baseline
+  // The best value once a win or a simpler attempt has moved it off the baseline
   const best = m.best !== null && m.best !== g.baseline ? ` Best so far ${round(m.best)} ${g.unit}.` : ''
   return `Goal: ${g.metric} ${round(g.baseline)} -> ${round(g.target)} ${g.unit}, ${change}.${best}`
 }

@@ -15,12 +15,12 @@ Rejections come back as `{"error": "<code>", "message": "<sentence>"}`: 400 for 
 | `PUT /agents/{id}/blurb` | Sets the agent's sentence |
 | `POST /agents/{id}/modules` | Adds a module right after the current one, behind any added earlier that haven't started, or last once every module has ended |
 | `GET /agents/{id}/modules/{m}` | Reads a module whole, with its verifiers' commands and file paths |
-| `POST /agents/{id}/modules/{m}/verifiers` | Submits and freezes a module's verifiers |
+| `POST /agents/{id}/modules/{m}/verifiers` | Submits and freezes a module's verifiers, with an optional `clean` command among their commands |
 | `POST /agents/{id}/modules/{m}/verifiers/changes` | Files a change request |
 | `GET /agents/{id}/modules/{m}/verifiers/changes` | Lists the module's change requests |
 | `GET /agents/{id}/modules/{m}/verifiers/changes/{change}` | Reads a change request and the admin's note |
 | `POST /agents/{id}/modules/{m}/attempts` | Queues an attempt |
-| `GET /agents/{id}/modules/{m}/attempts/{attemptId}` | Reads an attempt's job, its verdict with the numbers and why, the step's failed turns, the streak, and the module's state |
+| `GET /agents/{id}/modules/{m}/attempts/{attemptId}` | Reads an attempt's job, its verdict (`win`, `simpler`, `flat`, or `fail`) with the numbers, the sizes under the clean rules, and why, the step's failed turns, the streak, and the module's state |
 | `POST /agents/{id}/modules/{m}/steps/{n}/done` | Queues a step check |
 | `GET /agents/{id}/modules/{m}/steps/{n}` | Reads a step and what its latest check found |
 | `POST /agents/{id}/modules/{m}/abandon` | Abandons a module, with a follow-up if it has a win, and returns the commit the next module starts from |
@@ -36,7 +36,7 @@ Rejections come back as `{"error": "<code>", "message": "<sentence>"}`: 400 for 
 | `POST /signin` | Trades `{"token": "<admin token>"}` for the dashboard's cookie. Takes no token |
 | `POST /signout` | Clears the cookie |
 | `GET /api/board` | The dashboard's data: every agent, project, module, and attempt |
-| `GET /api/agents/{id}/modules/{m}/attempts/{a}` | An attempt's runs and test results |
+| `GET /api/agents/{id}/modules/{m}/attempts/{a}` | An attempt's runs, test results, and sizes under the clean rules |
 | `GET /admin/changes/{change}` | A change request with each changed file before and after |
 | `POST /admin/changes/{change}` | Approves or rejects a change request: `{"approve": true, "note": "…"}` |
 | `POST /admin/agents/{id}/stop` | Stops the agent's open project: `{"project": "search-perf", "note": "…"}`, both optional. The note is one line of at most 300 characters. Naming the project makes a repeat safe once the next one has opened. 409 when the agent has no open project |
@@ -49,5 +49,5 @@ Rejections come back as `{"error": "<code>", "message": "<sentence>"}`: 400 for 
 |---|---|
 | `POST /jobs/claim` | Claims the next job whose hardware label the runner has: `{"runner": "runner-1", "labels": ["cpu"]}`. 204 when there's none |
 | `POST /jobs/{job}/lease` | Renews the lease on a job the runner holds |
-| `POST /jobs/{job}/results` | Sends a job's `outcome` (`done`, `killed`, `badCommit`, `tampered`, or `error`), runs, test results, the verifier files its commit touched, the frozen files a command changed (`tampered`), and the `sandbox` it ran in |
+| `POST /jobs/{job}/results` | Sends a job's `outcome` (`done`, `killed`, `badCommit`, `tampered`, or `error`), runs, test results, the verifier files its commit touched, the frozen files a command changed (`tampered`), the `sandbox` it ran in, and for an attempt with a clean command, `clean`: each commit's result and size, such as `{"best": {"passed": true, "size": 812}, "next": {"passed": true, "size": 774}}` |
 | `GET /healthz` | `ok`, with no token |

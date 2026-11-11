@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { Commit } from '../../shared/api.ts'
+import type { CleanResults, Commit } from '../../shared/api.ts'
 import {
   abandon,
   addModule,
@@ -20,6 +20,7 @@ import {
   type Ticket,
 } from './commands.ts'
 import { agentOf, currentOf, factsOf, locate } from './queries.ts'
+import { judge } from './judge.ts'
 import { DEFAULTS, MINUTE, emptyWorld, type GoalSpec, type ModuleSpec, type Ms, type VerifierSpec, type World } from './records.ts'
 import type { RejectionCode, Result } from './result.ts'
 import { resultsTsv } from './resultsTsv.ts'
@@ -61,7 +62,7 @@ const OFFSETS = [0, 1, -1, 2, -2]
 const around = (c: Commit, v: number) => OFFSETS.map((k) => ({ commit: c, value: v + k * 0.2, work: 1000 }))
 
 /** A runner claims the next job and reports its runs: `value` on the commit under test, the best value on the best commit. */
-function run(w: World, when: Ms, value: number, opts: { tests?: [number, number]; runner?: string; labels?: string[]; took?: number } = {}): Ticket {
+function run(w: World, when: Ms, value: number, opts: { tests?: [number, number]; runner?: string; labels?: string[]; took?: number; clean?: CleanResults } = {}): Ticket {
   const runner = opts.runner ?? 'r1'
   const t = must(claimJob(w, when, { runner, labels: opts.labels ?? ['cpu'] }))
   assert.ok(t, 'a job to claim')
@@ -69,7 +70,7 @@ function run(w: World, when: Ms, value: number, opts: { tests?: [number, number]
   const best = factsOf(p, m, when).bestValue
   const runs = t.commits.length === 1 ? around(t.commit, t.kind === 'baseline' || best === null ? value : best) : around(t.commits[0]!, best!).flatMap((x, i) => [x, around(t.commit, value)[i]!])
   const [passed, total] = opts.tests ?? [10, 10]
-  must(sendResults(w, when + (opts.took ?? 0) * MINUTE, { job: t.job, runner, results: { outcome: 'done', tests: { passed, total }, runs, touched: [] } }))
+  must(sendResults(w, when + (opts.took ?? 0) * MINUTE, { job: t.job, runner, results: { outcome: 'done', tests: { passed, total }, runs, touched: [], ...(opts.clean ? { clean: opts.clean } : {}) } }))
   return t
 }
 
@@ -640,6 +641,55 @@ test('an attempt’s answer carries its numbers and says why it got its verdict'
   assert.equal(attemptStatusOf(w, 'a', 'm1', 'a4', at(20))!.why, 'Fail: 2 of 10 tests failed.')
   must(postAttempt(w, at(25), { agent: 'a', module: 'm1', attempt: 'a5', commit: commit('a5'), note: 'Try.' }))
   assert.equal(attemptStatusOf(w, 'a', 'm1', 'a5', at(25))!.why, 'Queued for a runner.')
+})
+
+test('an attempt at a metric no worse is simpler only when it follows the frozen clean rules at a smaller size', () => {
+  const goal = { direction: 'lower' as const, minGain: 2 }
+  const best = [100, 100.2, 99.8, 100.4, 99.6]
+  const passes = { passed: 10, total: 10 }
+  const verdict = (next: number[], clean?: CleanResults, tests = passes) => judge({ tests, killed: false, best, next, clean }, goal).verdict
+  const sized = (from: number, to: number, ok = { best: true, next: true }): CleanResults => ({ best: ok.best ? { passed: true, size: from } : { passed: false, size: from }, next: ok.next ? { passed: true, size: to } : { passed: false, size: to } })
+  // 0.2% better with overlapping runs: short of a win, and no worse
+  const equal = [99.8, 100, 99.6, 100.2, 99.4]
+  assert.equal(verdict(equal, sized(812, 774)), 'simpler')
+  assert.equal(verdict(equal, sized(812, 812)), 'flat', 'the same size is not simpler')
+  assert.equal(verdict(equal, sized(812, 774, { best: true, next: false })), 'flat', 'a commit that breaks the clean rules is not simpler')
+  assert.equal(verdict(equal, sized(812, 812, { best: false, next: true })), 'simpler', 'following rules the best commit broke, at no larger a size')
+  assert.equal(verdict(equal), 'flat', 'without a clean command nothing changes')
+  assert.equal(verdict(equal, sized(812, 774), { passed: 9, total: 10 }), 'fail')
+  // A median even 0.4% worse is flat, however much smaller, or a run of trims could add up to a slower best commit
+  assert.equal(verdict([100.4, 100.6, 100.2, 100.8, 100], sized(812, 700)), 'flat')
+  // A real gain is still a win, however large the code
+  assert.equal(verdict([95, 95.2, 94.8, 95.4, 94.6], sized(812, 900)), 'win')
+})
+
+test('a simpler attempt moves the best commit, but never meets the target or touches the streak', () => {
+  const w = emptyWorld()
+  const clean = (from: number, to: number): CleanResults => ({ best: { passed: true, size: from }, next: { passed: true, size: to } })
+  must(createProject(w, at(0), { agent: 'a', spec: { title: 'search', startCommit: START, modules: [mod('cache', ['one', 'two', 'three'])] } }))
+  const v = verifiers(3)
+  must(freezeVerifiers(w, at(0), { agent: 'a', module: 'm1', author: 'verifier', verifiers: { ...v, commands: { ...v.commands, clean: 'npm run lint && node size.js' } } }))
+  run(w, at(1), 100)
+  attempt(w, at(5), 'a1', 91)
+  // 1.6% lower is short of minGain, and its median reaches the target of 90, but a simpler attempt can't meet it
+  attempt(w, at(10), 'a2', 89.5, { clean: clean(812, 774) })
+  const status = attemptStatusOf(w, 'a', 'm1', 'a2', at(10))!
+  assert.equal(status.verdict, 'simpler')
+  assert.equal(status.why, 'Simpler: 1.6% lower than the best commit, short of a win, and 812 -> 774 in size under the clean rules.')
+  let m = viewOf(w, 'm1', at(10))
+  assert.deepEqual([m.status.state, m.bestCommit, m.best, m.streak, m.steps[0]!.failedTurns], ['active', commit('a2'), 89.5, 1, 0])
+  assert.deepEqual(m.clock.kind === 'running' && m.clock.extensions, [], 'no time for trimming code')
+  // The next win is measured against the simpler commit, and makes a streak of 2 with the win before it
+  const a3 = attempt(w, at(15), 'a3', 87)
+  assert.deepEqual(a3.commits, [commit('a2'), commit('a3')])
+  m = viewOf(w, 'm1', at(15))
+  assert.deepEqual([m.status.state, m.streak], ['pastTarget', 2])
+  assert.deepEqual(m.clock.kind === 'running' && m.clock.extensions.map((e) => e.cause), ['streak'])
+  // Past target, a simpler attempt keeps the module going, and a flat one passes it
+  attempt(w, at(20), 'a4', 86.9, { clean: clean(774, 700) })
+  assert.deepEqual([viewOf(w, 'm1', at(20)).status.state, viewOf(w, 'm1', at(20)).bestCommit], ['pastTarget', commit('a4')])
+  attempt(w, at(25), 'a5', 86.9)
+  assert.equal(viewOf(w, 'm1', at(25)).status.state, 'passed')
 })
 
 test('a step’s answer shows what its check found, and steps a module passed without are skipped', () => {

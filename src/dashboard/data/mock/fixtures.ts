@@ -18,12 +18,13 @@ export function hex(seed: string, length = 12): string {
   return out.slice(0, length)
 }
 
-/** A module spec, plus what the mock's verifiers need: its benchmark and test counts. */
+/** A module spec, plus what the mock's verifiers need: its benchmark, test counts, and whether they check the clean rules. */
 export interface Plan {
   spec: ModuleSpec
   bench: BenchName
   regressionTests: number
   stepTests: number[]
+  clean?: boolean
 }
 
 type Metric = { name: string; unit: string; direction: Direction; bench: BenchName }
@@ -34,8 +35,8 @@ const BUNDLE: Metric = { name: 'bundle size', unit: 'kB', direction: 'lower', be
 const DECODE: Metric = { name: 'decode speed', unit: 'tok/s', direction: 'higher', bench: 'decode' }
 const STARTUP: Metric = { name: 'startup time', unit: 'ms', direction: 'lower', bench: 'startup' }
 
-type Extra = { ambitious?: boolean; retryOf?: string }
-const plan = (m: Metric, title: string, targetGain: number, regressionTests: number, steps: [string, number][], { ambitious, retryOf }: Extra = {}): Plan => ({
+type Extra = { ambitious?: boolean; retryOf?: string; clean?: boolean }
+const plan = (m: Metric, title: string, targetGain: number, regressionTests: number, steps: [string, number][], { ambitious, retryOf, clean }: Extra = {}): Plan => ({
   spec: {
     title,
     steps: steps.map(([s]) => s),
@@ -45,18 +46,20 @@ const plan = (m: Metric, title: string, targetGain: number, regressionTests: num
   bench: m.bench,
   regressionTests,
   stepTests: steps.map(([, n]) => n),
+  ...(clean ? { clean } : {}),
 })
 
 /** The mock's verifier files and commands for a plan. The runner reads its test counts off the commands. */
 export function verifiersFor(agent: string, p: Plan, hardware = 'cpu', version = 1): VerifierSpec {
   return {
     hash: hex(`${agent}:${p.spec.title}:verifiers:${version}`),
-    paths: [`bench/${p.bench}.ts`, 'test/regression.test.ts', ...p.stepTests.map((_, i) => `test/step-${i + 1}.test.ts`)],
+    paths: [`bench/${p.bench}.ts`, 'test/regression.test.ts', ...p.stepTests.map((_, i) => `test/step-${i + 1}.test.ts`), ...(p.clean ? ['clean/size.ts'] : [])],
     image: 'node:26-slim',
     commands: {
       regression: `npm test -- regression  # ${p.regressionTests} tests`,
       steps: p.stepTests.map((n, i) => `npm test -- step-${i + 1}  # ${n} tests`),
       benchmark: `npm run bench -- ${p.bench}`,
+      ...(p.clean ? { clean: 'npm run lint && node clean/size.ts' } : {}),
     },
     hardware,
     timeLimitMinutes: 20,
@@ -298,10 +301,17 @@ function decodeSpeed(events: Event[], t0: Ms) {
         ['Fuse the softmax', 6],
         ['Fuse the projection', 4],
       ]),
-      plan(DECODE, 'kv cache paging', 10, 16, [
-        ['Page the KV cache', 5],
-        ['Prefetch the next page', 4],
-      ]),
+      plan(
+        DECODE,
+        'kv cache paging',
+        10,
+        16,
+        [
+          ['Page the KV cache', 5],
+          ['Prefetch the next page', 4],
+        ],
+        { clean: true },
+      ),
       plan(DECODE, 'speculative decoding', 15, 16, [
         ['Draft with a small model', 5],
         ['Verify drafts in batches', 4],
@@ -319,7 +329,7 @@ function decodeSpeed(events: Event[], t0: Ms) {
   s.attempt(-60, 'm2', 'a4', 'Page the cache in 16-token blocks.', { median: 1700 }, { waited: 3, took: 7 })
   s.attempt(-45, 'm2', 'a5', 'Page the cache in 64-token blocks.', { median: 1745 }, { took: 7 })
   s.attempt(-32, 'm2', 'a6', 'Page the cache in 128-token blocks.', { median: 1752 }, { took: 7 })
-  s.attempt(-18, 'm2', 'a7', 'Keep the first page resident.', { median: 1749 }, { took: 7 })
+  s.attempt(-18, 'm2', 'a7', 'Share one page table across the layers.', { median: 1749 }, { took: 7, clean: [3120, 2984] })
   s.blurb(-18, 'Paging the KV cache in 64-token blocks.')
 }
 

@@ -4,7 +4,7 @@ import { FlagList } from '../components/ModulePanel.tsx'
 import { PageHead } from '../components/PageHead.tsx'
 import { Badge, Icon, Spinner, VerdictDot } from '../components/parts.tsx'
 import { useAttemptDetail, useBoard } from '../data/hooks.tsx'
-import { JOB, VERDICT, figure, gainWords, pWords, plural, short, withUnit } from '../view/format.ts'
+import { JOB, VERDICT, figure, gainWords, pWords, plural, short, sizeWords, withUnit } from '../view/format.ts'
 import { agentPath } from '../view/routes.ts'
 import { NotFound } from './NotFound.tsx'
 import './attempt.css'
@@ -128,6 +128,12 @@ function Runs({ d, m }: { d: AttemptDetail; m: Module }) {
           <div className="at__check">
             <dt className="card__label">Work per run</dt>
             <dd className={work.short ? 'at__warn' : undefined}>{work.text}</dd>
+          </div>
+        )}
+        {d.clean && (
+          <div className="at__check">
+            <dt className="card__label">Size under the clean rules</dt>
+            <dd>{sizeWords(d.clean)}</dd>
           </div>
         )}
         <div className="at__check">

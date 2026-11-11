@@ -3,7 +3,7 @@
 // waits, extensions and the deadline) is computed in queries.ts and never
 // stored, so the numbers can't drift apart. Nothing here touches I/O, so the
 // dashboard's mock runs the same code in the browser.
-import type { AgentId, AttemptId, ChangeId, Commit, Direction, FlagKind, Iso, JobId, JobState, ModuleId, Run, Sandbox } from '../../shared/api.ts'
+import type { AgentId, AttemptId, ChangeId, CleanResults, Commit, Direction, FlagKind, Iso, JobId, JobState, ModuleId, Run, Sandbox } from '../../shared/api.ts'
 import type { Judged } from './judge.ts'
 
 /** Milliseconds since the epoch. */
@@ -81,7 +81,12 @@ export interface VerifierSpec {
   hash: string
   paths: string[]
   image: string
-  commands: { regression: string; steps: string[]; benchmark: string }
+  /**
+   * `clean` checks the clean-code rules the verifiers chose. It exits 0 when a
+   * commit follows them and prints the code's size as a last line such as
+   * {"size": 812}. Attempts run it on both commits.
+   */
+  commands: { regression: string; steps: string[]; benchmark: string; clean?: string }
   hardware: string
   timeLimitMinutes: number
   /** Benchmark runs per commit. Without it, the server's default. A noisy benchmark needs more. */
@@ -104,6 +109,8 @@ export interface JobResults {
   /** Frozen files a command changed while the job ran. */
   tampered?: string[]
   sandbox?: Sandbox
+  /** An attempt's clean command on both commits, when its verifiers have one and its tests passed. */
+  clean?: CleanResults
   error?: string
 }
 

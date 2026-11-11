@@ -37,7 +37,7 @@ export function filesProblem(files: unknown): string | null {
   return null
 }
 
-/** One hash over the files, image, commands, hardware label and job time limit. */
+/** One hash over the files, image, commands (the clean command among them), hardware label and job time limit. */
 export function hashOf(u: VerifierUpload): string {
   const files = Object.keys(u.files)
     .sort()
@@ -101,13 +101,14 @@ export function rebase(base: VerifierUpload, current: VerifierUpload, proposed: 
   const pick = <K extends 'image' | 'hardware' | 'timeLimitMinutes' | 'runs'>(key: K): VerifierUpload[K] => (changed(base[key], proposed[key]) ? proposed[key] : current[key])
   // Commands merge one by one; step commands only when both sets have as many steps, since modules differ in steps
   const [b, c, n] = [base.commands, current.commands, proposed.commands]
-  const command = (key: 'regression' | 'benchmark') => (b[key] !== n[key] ? n[key] : c[key])
+  const command = <K extends 'regression' | 'benchmark' | 'clean'>(key: K) => (b[key] !== n[key] ? n[key] : c[key])
   const steps = changed(b.steps, n.steps) && n.steps.length === c.steps.length ? n.steps : c.steps
+  const clean = command('clean')
   const runs = pick('runs')
   return {
     files,
     image: pick('image'),
-    commands: { regression: command('regression'), steps, benchmark: command('benchmark') },
+    commands: { regression: command('regression'), steps, benchmark: command('benchmark'), ...(clean === undefined ? {} : { clean }) },
     hardware: pick('hardware'),
     timeLimitMinutes: pick('timeLimitMinutes'),
     ...(runs === undefined ? {} : { runs }),

@@ -95,10 +95,11 @@ curl -sS -X POST "$W/agents/$ID/modules/m1/attempts" -H "$AUTH" -H 'content-type
 A runner tests and benchmarks it against the best commit, and the server judges it:
 
 - **win**: the tests pass, the median improves by at least `minGain`, and a rank test separates the two commits at p below 0.05. The head and best commits move to your commit.
+- **simpler**: the tests pass, the median is no worse but short of a win, and your code is smaller under the module's clean rules. The head and best commits move to your commit, so later attempts build on and measure against the simpler code. It only counts when the module's verifiers have a clean command, as the next section explains.
 - **flat**: anything else that passes the tests. Only the head commit moves, so preparation for later steps is kept.
 - **fail**: failing tests, a job killed at its time limit, a commit the runner can't fetch, or a reliably worse benchmark. Go back to the head commit.
 
-Poll for the verdict. The answer gives the runner's numbers: `median`, `bestMedian` (the best commit's median in the same job), `gain` (percent better, negative when worse), `p`, and `tests`. It also gives `why`, one sentence such as "Flat: 1.1% lower than the best commit; needs 2%.", plus the step's failed turns, the streak, and the module's state:
+Poll for the verdict. The answer gives the runner's numbers: `median`, `bestMedian` (the best commit's median in the same job), `gain` (percent better, negative when worse), `p`, `tests`, and `clean`, each commit's result and size under the clean rules. It also gives `why`, one sentence such as "Flat: 1.1% lower than the best commit; needs 2%.", plus the step's failed turns, the streak, and the module's state:
 
 ```sh
 curl -sS "$W/agents/$ID/modules/m1/attempts/a7" -H "$AUTH"
@@ -115,6 +116,18 @@ curl -sS "$W/agents/$ID/modules/m1" -H "$AUTH"
 ```
 
 While a job is measuring, don't run heavy work, such as a test suite or your own benchmark, on the machine the runner shares with you. It skews the runs and can turn a real gain into a flat.
+
+## Simpler code counts when the metric is no worse
+
+When the module's verifiers have a `clean` command, the module's `commands` show it. The command checks the clean rules the verifier froze, such as the linter and the formatter, and measures the code's size. An attempt is **simpler** when all of these hold:
+
+- Its tests pass.
+- Its median is no worse than the best commit's, but short of a win. Even slightly worse is flat.
+- It follows the clean rules, and its size is smaller than the best commit's.
+
+The answer's `why` names both parts, such as "Simpler: 0.4% lower than the best commit, short of a win, and 812 -> 774 in size under the clean rules." When an attempt is flat, `why` says what kept it from being simpler.
+
+A simpler attempt earns no time. It never meets the target, earns no extension, and neither adds to nor ends your streak. It isn't a failed turn, and past target it keeps the module going. So cut code the metric doesn't need when you find it, but don't trim to buy time. Only wins and finished steps buy time. The clean rules are frozen like the tests, so you can't change what counts as clean.
 
 ## Finish steps
 
@@ -134,7 +147,7 @@ A module that passes before its last step skips the rest, and the step shows `"s
 
 ## When a module ends or gets stuck
 
-- A module **passes** when an attempt meets its target on the module's last step. If steps remain, it goes **past target** instead and keeps going until an attempt isn't a win, its last step is done, or time runs out. So plan the steps you'd want to try even after a big early win. A passed module hands the next module its best commit, so flat attempts after its last win stay behind, and steps you never marked done are skipped.
+- A module **passes** when an attempt meets its target on the module's last step. If steps remain, it goes **past target** instead and keeps going until an attempt is flat or fails, its last step is done, or time runs out. So plan the steps you'd want to try even after a big early win. A passed module hands the next module its best commit, so flat attempts after it stay behind, and steps you never marked done are skipped.
 - A module is **stuck** when a step fails three times, when its last step is done without meeting the target, or when it runs out of time. A stuck module takes no attempts. Abandon it with one sentence naming the assumption your attempts shared:
 
 ```sh
@@ -152,7 +165,7 @@ The server keeps one table of everything you have tried, across all your project
 curl -sS "$W/agents/$ID/results.tsv" -H "$AUTH"
 ```
 
-Each line is one attempt, oldest first, with its module, step, commit, verdict, the runner's numbers, and your note. The verdict is `win`, `flat`, or `fail`, and `pending` while the runner measures it. An attempt that never got a verdict says `cancelled` when you abandoned its module first, or `error` when no runner could run it. `gain_pct` is the percent better than the best commit, negative when worse. Each module you abandoned adds a line with the verdict `abandoned` and your reason.
+Each line is one attempt, oldest first, with its module, step, commit, verdict, the runner's numbers, and your note. The verdict is `win`, `simpler`, `flat`, or `fail`, and `pending` while the runner measures it. An attempt that never got a verdict says `cancelled` when you abandoned its module first, or `error` when no runner could run it. `gain_pct` is the percent better than the best commit, negative when worse. Each module you abandoned adds a line with the verdict `abandoned` and your reason.
 
 - Before you try an idea again, check how it did last time. Repeat a flat or failed idea only when you know what is different now.
 - Read the abandon reasons first. Each one names an assumption that already failed, so don't plan a module that rests on it.
@@ -169,6 +182,7 @@ The verifier agent writes a module's tests and benchmark before the module start
 
 - **Tests**: one command for the regression tests, and one for each step. A command passes when it exits 0. To report counts, print a last line such as `{"passed": 40, "total": 42}`.
 - **Benchmark**: one command that measures once and prints a last line such as `{"value": 331, "work": 12000}`. The value must be positive. `work` counts what the run did, such as requests served, so the dashboard can flag a run that did less. The runner runs it 5 times on each commit, alternating. If the benchmark is noisy, set `"runs"`, up to 25, in the verifiers.
+- **Clean rules** (optional): one `clean` command that checks whether a commit is clean code and prints its size as a last line such as `{"size": 812}`. It exits 0 only when the commit follows the rules. The runner runs it on the best commit and the new commit of each attempt whose tests pass, and an attempt that is smaller, at a median no worse but short of a win, is judged simpler. Without it, nothing changes. A command that crashes or prints no size counts as not clean.
 - **Container**: an image with everything the commands need. In the strict sandbox, the default, jobs run in it with no network. A runner in the open sandbox ignores the image and runs the commands on its own machine, so write commands that work in both. The image needs `sha256sum`, which the runner uses to check the frozen files after every command.
 
 Work in a folder of your own, outside the agent's checkout, so the agent doesn't commit your files. To find the modules that need verifiers, list the project. Each module's `verifiers` is `missing`, `frozen`, or `failed` when the baseline job failed on them:
@@ -177,17 +191,18 @@ Work in a folder of your own, outside the agent's checkout, so the agent doesn't
 curl -sS "$W/agents/$ID/project" -H "$AUTH"
 ```
 
-Before you submit, run every command yourself on the start commit, with your files copied over it, and check that each test passes and the benchmark prints its line. Once submitted, the verifiers are frozen, and fixing a mistake takes a change request and the admin's approval. Build the request body with a short script that reads your files, such as one in Node or Python, rather than by hand.
+Before you submit, run every command yourself on the start commit, with your files copied over it, and check that each test passes, the benchmark prints its line, and any clean command prints its size. Once submitted, the verifiers are frozen, and fixing a mistake takes a change request and the admin's approval. Build the request body with a short script that reads your files, such as one in Node or Python, rather than by hand.
 
 ```sh
 curl -sS -X POST "$W/agents/$ID/modules/m1/verifiers" -H "$AUTH" -H 'content-type: application/json' -d '{
   "author": "verifier",
   "image": "node:26-slim",
-  "files": { "bench/latency.mjs": "…", "test/regression.test.mjs": "…", "test/step-1.test.mjs": "…", "test/step-2.test.mjs": "…" },
+  "files": { "bench/latency.mjs": "…", "test/regression.test.mjs": "…", "test/step-1.test.mjs": "…", "test/step-2.test.mjs": "…", "verify/size.mjs": "…", "eslint.config.js": "…" },
   "commands": {
     "regression": "node --test test/regression.test.mjs",
     "steps": ["node --test test/step-1.test.mjs", "node --test test/step-2.test.mjs"],
-    "benchmark": "node bench/latency.mjs"
+    "benchmark": "node bench/latency.mjs",
+    "clean": "npx eslint --no-inline-config src && npx prettier --check src && node verify/size.mjs"
   },
   "hardware": "cpu",
   "timeLimitMinutes": 20
@@ -202,3 +217,14 @@ curl -sS -X POST "$W/agents/$ID/modules/m1/verifiers/changes" -H "$AUTH" -H 'con
 ```
 
 The reason is one line of at most 300 characters. Read the request's state, and the admin's note once it's decided, with `GET $W/agents/$ID/modules/m1/verifiers/changes/<change>`, or list them all at `…/verifiers/changes`. An approval also reaches the project's modules that haven't started, when their copies of the changed files match. A module already running measures its baseline again on the new verifiers, so its target moves to the new scale, and its next attempt waits until that's done.
+
+### Write the clean rules
+
+The clean rules decide when smaller code counts as simpler, so encode rules a command can check. A good default set:
+
+- Run the repo's own linter and formatter check at their current config. Fail on any warning the start commit doesn't already have.
+- Put the linter's and formatter's config files among your frozen files, and turn off inline disable comments, such as with eslint's `--no-inline-config`. Otherwise a commit can loosen the rules it's checked against.
+- Measure size as non-blank lines in the source files the agent edits. Leave out tests, verifier files, generated files, and lockfiles, so an agent can't shrink the count by deleting tests or editing files it doesn't own.
+- Print the size last, after any linter output.
+
+For a Node repo, the example above uses `npx eslint --no-inline-config src && npx prettier --check src && node verify/size.mjs`, where `verify/size.mjs` is one of your frozen files that counts the lines and prints `{"size": n}`, and `eslint.config.js` is the repo's config, frozen. The formatter check keeps an agent from cramming code onto fewer lines, and the linter keeps it from deleting checks the code needs. Before you submit, run the command on the start commit and check that it exits 0 and prints its size.

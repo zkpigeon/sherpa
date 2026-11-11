@@ -3,16 +3,20 @@
 import type { Commit, ProjectEnd, ProjectResult } from '../../shared/api.ts'
 import { extensionSeries, improve, judge, median } from './judge.ts'
 import { MINUTE, type AgentRec, type AttemptRec, type Ms, type JobRec, type ModuleRec, type ProjectRec, type VerifierSet, type World } from './records.ts'
-import { GRACE_SHARE, ended, live } from './rules.ts'
+import { GRACE_SHARE, VERDICTS, does, ended, live, type Streak } from './rules.ts'
 
 export const verifiersOf = (m: ModuleRec): VerifierSet | null => m.verifiers.at(-1) ?? null
 export const verifierSet = (m: ModuleRec, hash: string): VerifierSet | null => m.verifiers.findLast((v) => v.hash === hash) ?? null
 export const inFlight = (m: ModuleRec): JobRec | null => m.jobs.find((j) => j.state === 'queued' || j.state === 'running') ?? null
 export const lastWin = (m: ModuleRec): AttemptRec | null => m.attempts.findLast((a) => a.judged?.verdict === 'win') ?? null
+/** The latest attempt whose verdict moved the best commit. */
+export const lastBest = (m: ModuleRec): AttemptRec | null => m.attempts.findLast((a) => does(a.judged?.verdict, 'movesBest')) ?? null
+/** The commit an ended module hands on: its best commit once it has a win. A module without a win drops its commits. */
+const keptOf = (m: ModuleRec): Commit | null => (lastWin(m) ? lastBest(m)!.commit : null)
 /** When an attempt's job ended, judged or not. Null while it's in flight. */
 export const attemptEnd = (m: ModuleRec, a: AttemptRec): Ms | null => a.judgedAt ?? m.jobs.find((j) => j.id === a.job)?.finishedAt ?? null
 
-export const failedTurns = (m: ModuleRec, step: number) => m.attempts.filter((a) => a.step === step && a.judged?.verdict === 'fail').length
+export const failedTurns = (m: ModuleRec, step: number) => m.attempts.filter((a) => a.step === step && does(a.judged?.verdict, 'failedTurn')).length
 /** Every module has passed or been abandoned. The project stays open for the agent's next module. */
 export const modulesEnded = (p: ProjectRec) => p.modules.every((m) => ended(m.state))
 
@@ -31,16 +35,18 @@ export function currentStepIndex(m: ModuleRec): number {
   return i === -1 ? m.steps.length : i
 }
 
+/** Wins in a row since the last verdict that ended the streak. */
 export function streakOf(m: ModuleRec): number {
   let n = 0
   for (const a of m.attempts.filter((x) => x.judged).reverse()) {
-    if (a.judged?.verdict !== 'win') break
-    n++
+    const streak = VERDICTS[a.judged!.verdict].streak
+    if (streak === 'ends') break
+    if (streak === 'extends') n++
   }
   return n
 }
 
-const headOf = (m: ModuleRec, start: Commit | null) => m.attempts.findLast((a) => a.judged?.verdict === 'win' || a.judged?.verdict === 'flat')?.commit ?? start
+const headOf = (m: ModuleRec, start: Commit | null) => m.attempts.findLast((a) => does(a.judged?.verdict, 'movesHead'))?.commit ?? start
 
 /** Each module's start commit, in project order: what the module before it left behind. Null until that module ends. */
 export function startCommits(p: ProjectRec): (Commit | null)[] {
@@ -48,9 +54,9 @@ export function startCommits(p: ProjectRec): (Commit | null)[] {
   let from: Commit | null = p.startCommit
   for (const m of p.modules) {
     out.push(from)
-    // An ended module leaves its best commit: its latest win, or its own start without one
+    // An ended module leaves its best commit once it has a win, or its own start without one
     if (from === null || !ended(m.state)) from = null
-    else from = lastWin(m)?.commit ?? from
+    else from = keptOf(m) ?? from
   }
   return out
 }
@@ -60,7 +66,7 @@ export function endCommit(p: ProjectRec): Commit | null {
   const starts = startCommits(p)
   const m = p.modules.at(-1)
   if (!m || !ended(m.state)) return null
-  return lastWin(m)?.commit ?? starts.at(-1) ?? null
+  return keptOf(m) ?? starts.at(-1) ?? null
 }
 
 /** The commit the project has reached: the start of its first module that hasn't ended, or where it ended. */
@@ -168,29 +174,30 @@ export interface ExtensionRec {
  * half the previous to each later win or held step.
  */
 export function extensionsOf(m: ModuleRec, start: Commit | null = null): ExtensionRec[] {
-  type Event = { at: Ms; attempt: boolean; win: boolean; held: boolean }
+  // A finished step neither extends nor ends a streak
+  type Event = { at: Ms; attempt: boolean; streak: Streak; held: boolean }
   // A finished step only counts if its check measured a different head commit than the step before it, or the start
   let checked = start
   const steps = m.steps
     .filter((s) => s.doneAt !== null)
     .sort((x, y) => x.doneAt! - y.doneAt!)
-    .map((s) => {
+    .map((s): Event => {
       const changed = s.commit === undefined || s.commit === null || s.commit !== checked
       if (s.commit) checked = s.commit
-      return { at: s.doneAt!, attempt: false, win: false, held: s.held === true && changed }
+      return { at: s.doneAt!, attempt: false, streak: 'holds', held: s.held === true && changed }
     })
-  const events: Event[] = [...m.attempts.filter((a) => a.judged && a.judgedAt !== null).map((a) => ({ at: a.judgedAt!, attempt: true, win: a.judged!.verdict === 'win', held: false })), ...steps].sort(
-    (x, y) => x.at - y.at,
-  )
+  const attempts = m.attempts.filter((a) => a.judged && a.judgedAt !== null).map((a): Event => ({ at: a.judgedAt!, attempt: true, streak: VERDICTS[a.judged!.verdict].streak, held: false }))
+  const events = [...attempts, ...steps].sort((x, y) => x.at - y.at)
   const series = extensionSeries(m.maxMinutes)
   const out: ExtensionRec[] = []
   let run = 0
   for (const e of events) {
-    if (e.attempt) run = e.win ? run + 1 : 0
+    const win = e.streak === 'extends'
+    if (e.streak !== 'holds') run = win ? run + 1 : 0
     const minutes = series[out.length]
     if (minutes === undefined) break
     const first = out.length === 0
-    const earns = first ? (e.win && run >= 2) || e.held : e.win || e.held
+    const earns = first ? (win && run >= 2) || e.held : win || e.held
     if (earns) out.push({ minutes, cause: e.attempt ? (first ? 'streak' : 'win') : 'step', at: e.at })
   }
   return out
@@ -221,16 +228,16 @@ export interface Facts {
 
 export function factsOf(p: ProjectRec, m: ModuleRec, now: Ms): Facts {
   const start = startCommits(p)[p.modules.indexOf(m)] ?? null
-  const win = lastWin(m)
+  const moved = lastBest(m)
   // The clock starts at the first baseline; the numbers come from the latest, taken again when the verifiers change
   const first = baselineJob(m)
   const latest = latestBaseline(m)
   const on = (c: Commit | null) => latest!.results!.runs.filter((r) => r.commit === c).map((r) => r.value)
   const baseline = latest ? median(on(latest.commit)) : null
   const startedAt = first?.finishedAt ?? null
-  // A re-measured baseline also measured the best commit, which stands until the next win
+  // A re-measured baseline also measured the best commit, which stands until the best commit moves
   const remeasured = latest && latest.bestCommit && on(latest.bestCommit).length ? median(on(latest.bestCommit)) : null
-  const bestValue = win?.judged && win.judgedAt !== null && latest && win.judgedAt > latest.finishedAt! ? win.judged.median : (remeasured ?? win?.judged?.median ?? baseline)
+  const bestValue = moved?.judged && moved.judgedAt !== null && latest && moved.judgedAt > latest.finishedAt! ? moved.judged.median : (remeasured ?? moved?.judged?.median ?? baseline)
   const waits = waitsOf(m, startedAt, now)
   const waited = waits.reduce((sum, w) => sum + w.minutes, 0)
   const extensions = startedAt === null ? [] : extensionsOf(m, start)
@@ -247,7 +254,7 @@ export function factsOf(p: ProjectRec, m: ModuleRec, now: Ms): Facts {
         null)
   return {
     start,
-    best: win?.commit ?? start,
+    best: moved?.commit ?? start,
     head: headOf(m, start),
     baseline,
     target: baseline === null ? null : improve(baseline, m.goal.targetGain, m.goal.direction),

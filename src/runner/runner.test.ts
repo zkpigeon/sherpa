@@ -158,7 +158,7 @@ test('the same in bare Docker containers', { skip: !hasBusybox && 'needs Docker 
 )
 
 /** A server and runner for one module whose verifiers are `files`, with `next()` running the next job. */
-async function rig(name: string, executor: Executor, image: string, files: Record<string, string>, benchmark: string, regression: string) {
+async function rig(name: string, executor: Executor, image: string, files: Record<string, string>, benchmark: string, regression: string, clean?: string) {
   const store = openStore(join(root, `${name}.db`))
   const server = createServer(createHandler({ service: createService(store), tokens: TOKENS, dashboard: null }))
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
@@ -182,7 +182,7 @@ async function rig(name: string, executor: Executor, image: string, files: Recor
   }
   const start = async (repo: string, startCommit: string) => {
     await call('POST', '/agents/1/projects', { title: name, startCommit, repo, modules: [{ title: 'm', steps: ['s'], goal: { metric: 'time', unit: 'ms', direction: 'lower', targetGain: 10 } }] })
-    await call('POST', '/agents/1/modules/m1/verifiers', { author: 'verifier', image, files, commands: { regression, steps: [regression], benchmark }, hardware: 'cpu', timeLimitMinutes: 5 })
+    await call('POST', '/agents/1/modules/m1/verifiers', { author: 'verifier', image, files, commands: { regression, steps: [regression], benchmark, ...(clean ? { clean } : {}) }, hardware: 'cpu', timeLimitMinutes: 5 })
   }
   const module = async () => ((await call('GET', '/api/board', undefined, TOKENS.admin)) as Board).agents[0]!.project!.modules[0]!
   return { call, next, stop, start, module }
@@ -220,6 +220,39 @@ test('symlinks in a commit can’t carry the frozen files out of the checkout', 
     assert.deepEqual([m.attempts[0]!.verdict, m.attempts[0]!.median], ['win', 80], 'the frozen benchmark ran, not the link')
     assert.equal(existsSync(join(outside, 'settings')), false, 'nothing was written through the link')
     assert.deepEqual(m.flags.map((f) => f.kind), ['touchedVerifier'])
+  } finally {
+    await r.stop()
+  }
+})
+
+test('a runner runs the clean command on both commits, and smaller code at a metric no worse is simpler', async () => {
+  const dir = join(root, 'clean')
+  mkdirSync(dir)
+  const git = (...args: string[]) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim()
+  git('init', '--quiet', '--initial-branch=main')
+  git('config', 'user.email', 'agent@example.com')
+  git('config', 'user.name', 'agent')
+  const commit = (app: string) => {
+    writeFileSync(join(dir, 'value.txt'), '100')
+    writeFileSync(join(dir, 'app.txt'), app)
+    git('add', '-A')
+    git('commit', '--quiet', '-m', 'commit')
+    return git('rev-parse', 'HEAD')
+  }
+  const start = commit('a\nb\nc\nd\n')
+  const slim = commit('a\nb\n')
+  // The clean rules: no TODO lines, and the size is the count of non-blank lines
+  const files = { 'bench.sh': `echo "{\\"value\\": $(cat value.txt), \\"work\\": 1}"`, 'clean.sh': `! grep -q TODO app.txt && echo "{\\"size\\": $(grep -c . app.txt)}"` }
+  const r = await rig('clean', openExecutor(), 'unused', files, 'sh bench.sh', 'true', 'sh clean.sh')
+  try {
+    await r.start(`file://${dir}`, start)
+    await r.next()
+    await r.call('POST', '/agents/1/modules/m1/attempts', { attemptId: 'a1', commit: slim, note: 'Drop the lines nothing reads.' })
+    await r.next()
+    const status = await r.call('GET', '/agents/1/modules/m1/attempts/a1')
+    assert.deepEqual(status.clean, { best: { passed: true, size: 4 }, next: { passed: true, size: 2 } })
+    assert.equal(status.verdict, 'simpler')
+    assert.equal((await r.module()).bestCommit, slim)
   } finally {
     await r.stop()
   }

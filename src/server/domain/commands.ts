@@ -2,7 +2,7 @@
 // at the call's time first, as the server does on every request. Then it
 // either rejects without touching anything, or applies the change and
 // returns what the caller needs. Repeating a call has no further effect.
-import { SANDBOXES, type AgentId, type AttemptId, type ChangeId, type Commit, type FlagKind, type Iso, type JobId, type JobState, type ModuleId } from '../../shared/api.ts'
+import { SANDBOXES, type AgentId, type AttemptId, type ChangeId, type Clean, type Commit, type FlagKind, type Iso, type JobId, type JobState, type ModuleId } from '../../shared/api.ts'
 import { holds, judge, reaches } from './judge.ts'
 import {
   agentOf,
@@ -54,6 +54,7 @@ import {
   FAILED_TURNS,
   HOLD_GRACE_MINUTES,
   MAX_RUNNER_ERRORS,
+  VERDICTS,
   goalMismatch,
   goalOf,
   ended,
@@ -116,7 +117,7 @@ const normalVerifiers = (v: VerifierSpec): VerifierSpec => ({
   hash: v.hash,
   paths: [...v.paths],
   image: v.image,
-  commands: { regression: v.commands.regression, steps: [...v.commands.steps], benchmark: v.commands.benchmark },
+  commands: { regression: v.commands.regression, steps: [...v.commands.steps], benchmark: v.commands.benchmark, ...(v.commands.clean === undefined ? {} : { clean: v.commands.clean }) },
   hardware: v.hardware,
   timeLimitMinutes: v.timeLimitMinutes,
   ...(v.runs === undefined ? {} : { runs: v.runs }),
@@ -312,6 +313,7 @@ export function settle(w: World, now: Ms, config: Config = DEFAULTS) {
 // Applying a job's results
 
 const valuesOn = (j: JobRec, commit: Commit | null) => j.results!.runs.filter((r) => r.commit === commit)
+const cleanOf = (c: Clean): Clean => (c.passed ? { passed: true, size: c.size } : { passed: false, size: c.size })
 
 function workFlags(m: ModuleRec, j: JobRec, attempt: AttemptId | null, at: Ms) {
   const best = valuesOn(j, j.bestCommit)
@@ -342,7 +344,7 @@ function landBaseline(m: ModuleRec, j: JobRec, at: Ms) {
 function judgeAttempt(p: ProjectRec, m: ModuleRec, x: AttemptRec, j: JobRec, at: Ms, fresh: boolean) {
   const r = j.results!
   const values = (c: Commit | null) => valuesOn(j, c).map((run) => run.value)
-  x.judged = judge({ tests: r.tests, killed: r.outcome !== 'done', best: values(j.bestCommit), next: values(j.commit) }, m.goal)
+  x.judged = judge({ tests: r.tests, killed: r.outcome !== 'done', best: values(j.bestCommit), next: values(j.commit), clean: r.clean }, m.goal)
   x.judgedAt = at
 
   if (fresh) {
@@ -354,12 +356,12 @@ function judgeAttempt(p: ProjectRec, m: ModuleRec, x: AttemptRec, j: JobRec, at:
   }
 
   const f = factsOf(p, m, at)
-  const verdict = x.judged.verdict
+  const verdict = VERDICTS[x.judged.verdict]
   if (m.state === 'active') {
-    if (verdict === 'win' && f.target !== null && reaches(x.judged.median!, f.target, m.goal.direction))
+    if (verdict.canMeetTarget && f.target !== null && reaches(x.judged.median!, f.target, m.goal.direction))
       move(m, x.step < m.steps.length ? 'metTargetStepsLeft' : 'metTarget', at)
-    else if (verdict === 'fail' && failedTurns(m, x.step) >= FAILED_TURNS) move(m, 'stepFailed', at)
-  } else if (m.state === 'pastTarget' && verdict !== 'win') move(m, 'streakEnded', at)
+    else if (verdict.failedTurn && failedTurns(m, x.step) >= FAILED_TURNS) move(m, 'stepFailed', at)
+  } else if (m.state === 'pastTarget' && verdict.streak === 'ends') move(m, 'streakEnded', at)
 }
 
 function checkStep(m: ModuleRec, j: JobRec, at: Ms, fresh: boolean) {
@@ -741,6 +743,8 @@ export interface Ticket {
   tests: string[]
   benchmark: string
   runs: number
+  /** The clean command to run on both commits. Only attempts run it. */
+  clean: string | null
   leaseUntil: Iso
 }
 
@@ -778,6 +782,7 @@ export function claimJob(w: World, at: Ms, args: { runner: string; labels: strin
     tests: j.kind === 'final' ? [] : [v.commands.regression, ...j.stepTests.map((n) => v.commands.steps[n - 1]!)],
     benchmark: v.commands.benchmark,
     runs: v.runs ?? config.runs,
+    clean: j.kind === 'attempt' ? (v.commands.clean ?? null) : null,
     leaseUntil: iso(leaseUntil),
   })
 }
@@ -794,7 +799,7 @@ export function renewLease(w: World, at: Ms, args: { job: string; runner: string
   return ok({ state: j.state, leaseUntil: iso(claim.leaseUntil) })
 }
 
-function resultsProblem(r: JobResults | undefined, j: JobRec, runs: number): string | null {
+function resultsProblem(r: JobResults | undefined, m: ModuleRec, j: JobRec, runs: number): string | null {
   if (!r || typeof r !== 'object') return 'Results must be an object.'
   if (!['done', 'killed', 'badCommit', 'tampered', 'error'].includes(r.outcome)) return 'outcome must be done, killed, badCommit, tampered, or error.'
   if (r.sandbox !== undefined && !SANDBOXES.includes(r.sandbox)) return `sandbox must be ${SANDBOXES.join(' or ')}.`
@@ -815,6 +820,12 @@ function resultsProblem(r: JobResults | undefined, j: JobRec, runs: number): str
     if (n !== 0 && n !== runs) return `Send ${runs} runs on ${c}, or none if its benchmark failed; got ${n}.`
   }
   if (!Array.isArray(r.touched) || r.touched.length > 1000 || !r.touched.every((x) => typeof x === 'string')) return 'touched must be a list of file paths.'
+  if (r.clean !== undefined) {
+    const size = (x: unknown) => Number.isFinite(x) && (x as number) > 0
+    const one = (c: Clean | undefined) => !!c && typeof c === 'object' && (c.passed === true ? size(c.size) : c.passed === false && (c.size === null || size(c.size)))
+    if (j.kind !== 'attempt' || !verifierSet(m, j.verifierHash)?.commands.clean) return 'Send clean results only for an attempt whose verifiers have a clean command.'
+    if (!r.clean || !one(r.clean.best) || !one(r.clean.next)) return 'clean must give best and next, each with passed and a positive size, or a null size when it failed.'
+  }
   return null
 }
 
@@ -827,7 +838,7 @@ export function sendResults(w: World, at: Ms, args: { job: string; runner: strin
   if (j.state === 'done' || j.state === 'killed' || j.state === 'failed' || j.state === 'cancelled') return ok({ state: j.state })
   const claim = j.claims.at(-1)
   if (j.state !== 'running' || !claim || claim.runner !== args.runner || claim.endedAt !== null) return conflict('notYourJob', `${args.runner} doesn't hold ${j.id}. Its lease lapsed, or another runner holds it.`)
-  const problem = resultsProblem(args.results, j, verifierSet(m, j.verifierHash)?.runs ?? config.runs)
+  const problem = resultsProblem(args.results, m, j, verifierSet(m, j.verifierHash)?.runs ?? config.runs)
   if (problem) return invalid('badResults', problem)
 
   const r = args.results
@@ -843,6 +854,7 @@ export function sendResults(w: World, at: Ms, args: { job: string; runner: strin
     touched: r.touched.slice(0, 1000),
     ...(r.tampered?.length ? { tampered: r.tampered.slice(0, 1000) } : {}),
     ...(r.sandbox ? { sandbox: r.sandbox } : {}),
+    ...(r.clean ? { clean: { best: cleanOf(r.clean.best), next: cleanOf(r.clean.next) } } : {}),
     ...(r.error ? { error: String(r.error).slice(0, 500) } : {}),
   }
   // A commit the runner can't fetch fails like failing tests, but isn't stored as a result to reuse

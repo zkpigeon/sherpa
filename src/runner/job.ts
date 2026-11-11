@@ -1,13 +1,14 @@
 // One job, start to finish: check out each commit, note which verifier files
 // the commit under test changed, copy the frozen files over every checkout,
-// run the tests, then the benchmark alternating between commits, and send
-// what happened. After every command it checks the frozen files on every
-// checkout, and a command that changed one throws the whole job out. The
-// lease is renewed throughout; if the server says the job was cancelled or
-// taken away, the job stops and sends nothing.
+// run the tests, then the benchmark alternating between commits, then any
+// clean command on each commit, and send what happened. After every command
+// it checks the frozen files on every checkout, and a command that changed
+// one throws the whole job out. The lease is renewed throughout; if the
+// server says the job was cancelled or taken away, the job stops and sends
+// nothing.
 import { lstatSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
-import type { Run } from '../shared/api.ts'
+import type { Clean, Run } from '../shared/api.ts'
 import type { Ticket } from '../server/domain/commands.ts'
 import type { JobResults } from '../server/domain/records.ts'
 import { safePath } from '../server/verifiers.ts'
@@ -76,6 +77,13 @@ export function benchRun(r: Exit): { value: number; work: number } | null {
   if (!j || typeof j.value !== 'number' || !Number.isFinite(j.value) || j.value <= 0) return null
   const work = typeof j.work === 'number' && Number.isFinite(j.work) && j.work >= 0 ? j.work : 0
   return { value: j.value, work }
+}
+
+/** One commit under the clean rules: it follows them when the command exits 0 and prints a positive {"size": n}. A size printed on a failing exit is kept. */
+export function cleanRun(r: Exit): Clean {
+  const j = lastJson(r.stdout)
+  const size = j && typeof j.size === 'number' && Number.isFinite(j.size) && j.size > 0 ? j.size : null
+  return r.code === 0 && size !== null ? { passed: true, size } : { passed: false, size }
 }
 
 class Killed extends Error {}
@@ -201,7 +209,9 @@ export async function runJob(t: Claimed, d: JobDeps, stop?: AbortSignal): Promis
           runs.push({ commit: c as Run['commit'], value: r.value, work: r.work })
         }
     }
-    results = { outcome: 'done', tests, runs, touched, sandbox }
+    // The clean rules on both commits, only once the tests pass, since a failing attempt can't be simpler
+    const clean = t.clean && best && tests.passed === tests.total ? { best: cleanRun(await exec(box.get(best)!, t.clean)), next: cleanRun(await exec(box.get(t.commit)!, t.clean)) } : null
+    results = { outcome: 'done', tests, runs, touched, ...(clean ? { clean } : {}), sandbox }
   } catch (e) {
     if (e instanceof Lost) {
       d.log(`${t.job} was cancelled, taken away, or stopped`)

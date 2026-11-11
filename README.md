@@ -16,6 +16,7 @@ Created in [T3 Code](https://t3.codes).
 4. **A runner measures the attempt**, by default in a container with no network. It runs the tests on the new commit, then the benchmark on it and on the best commit, taking turns. Whatever the sandbox, the agent can't change the tests or the benchmark. [Sandbox](#sandbox) explains the choice.
 5. **The server judges the attempt.**
    - A win moves the best commit and can earn more time.
+   - A simpler attempt moves the best commit too. Its metric is no worse and its code is smaller, under clean rules the verifier freezes. It earns no time.
    - A flat keeps the work but not the credit.
    - A fail sends the agent back.
 

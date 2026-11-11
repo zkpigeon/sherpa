@@ -93,6 +93,10 @@ test('the initial board shows every state the dashboard has to handle', () => {
     'a passed module',
   )
   assert.ok(all.some((m) => m.status.state === 'abandoned' && m.status.followUp !== null) && all.some((m) => m.retryOf !== null), 'abandoned with a follow-up')
+  assert.ok(
+    all.some((m) => m.attempts.some((a) => a.verdict === 'simpler')),
+    'a simpler attempt',
+  )
 })
 
 for (const { label, board, world } of FRAMES) {
@@ -116,9 +120,12 @@ for (const { label, board, world } of FRAMES) {
 
       const judged = m.attempts.filter((x) => x.verdict)
       const wins = judged.filter((x) => x.verdict === 'win')
-      assert.equal(m.best, wins.at(-1)?.median ?? g.baseline, `${where} best`)
-      if (wins.length) assert.equal(m.bestCommit, wins.at(-1)!.commit, `${where} best commit`)
-      const trailing = judged.length - 1 - judged.findLastIndex((x) => x.verdict !== 'win')
+      const moved = judged.filter((x) => x.verdict === 'win' || x.verdict === 'simpler')
+      assert.equal(m.best, moved.at(-1)?.median ?? g.baseline, `${where} best`)
+      if (moved.length) assert.equal(m.bestCommit, moved.at(-1)!.commit, `${where} best commit`)
+      // A simpler attempt neither extends nor ends a streak
+      const counted = judged.filter((x) => x.verdict !== 'simpler')
+      const trailing = counted.length - 1 - counted.findLastIndex((x) => x.verdict !== 'win')
       assert.equal(m.streak, trailing, `${where} streak`)
       m.steps.forEach((s, i) => assert.equal(s.failedTurns, judged.filter((x) => x.step === i + 1 && x.verdict === 'fail').length, `${where} failed turns`))
 
@@ -198,7 +205,8 @@ for (const { label, board, world } of FRAMES) {
           close(d.p!, p, `${where} p`)
         }
         const testsPass = d.tests !== null && d.tests.passed === d.tests.total
-        const expected = !testsPass ? 'fail' : d.gain! >= m.goal.minGain && d.p! < 0.05 ? 'win' : d.gain! < 0 && d.p! < 0.05 ? 'fail' : 'flat'
+        const flat = d.clean && d.gain! >= -m.goal.minGain && d.clean.next.passed && d.clean.best.size !== null && d.clean.next.size! < d.clean.best.size ? 'simpler' : 'flat'
+        const expected = !testsPass ? 'fail' : d.gain! >= m.goal.minGain && d.p! < 0.05 ? 'win' : d.gain! < 0 && d.p! < 0.05 ? 'fail' : flat
         assert.equal(x.verdict, expected, `${where} verdict`)
       }
       for (const f of m.flags) {
